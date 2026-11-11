@@ -1,0 +1,184 @@
+[
+    {
+        "type": "text",
+        "text": "阶段零合成实验资料",
+        "text_level": 2,
+        "bbox": [
+            76,
+            40,
+            349,
+            68
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "PHASE0-PAGE-ONE | Synthetic experiment, 2026",
+        "bbox": [
+            75,
+            83,
+            490,
+            103
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Three groups; four time points; six independent samples per cell. Response measurements are synthetic and use arbitrary units.",
+        "bbox": [
+            75,
+            113,
+            598,
+            157
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "table",
+        "img_path": "images/e47d6f6b4200eefbca95ce523c6d18ab8e6c342a60d9d61fd75c47be03f3b5fa.jpg",
+        "table_caption": [
+            "Table 1. Experimental design"
+        ],
+        "table_footnote": [],
+        "table_body": "<table><tr><td>Group</td><td>Days</td><td>n per day</td></tr><tr><td>Control</td><td>0, 7, 14, 21</td><td>6</td></tr><tr><td>Treatment A</td><td>0, 7, 14, 21</td><td>6</td></tr><tr><td>Treatment B</td><td>0, 7, 14, 21</td><td>6</td></tr></table>",
+        "bbox": [
+            78,
+            199,
+            890,
+            329
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "chart",
+        "img_path": "images/33a2ef9289a9ca60e89802b9ac7204fea80c8a00d172c1b0034ef1101cf208af.jpg",
+        "content": "",
+        "chart_caption": [],
+        "chart_footnote": [],
+        "bbox": [
+            78,
+            395,
+            496,
+            707
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "chart",
+        "img_path": "images/4ad93309a3f0ae8bd9f1ccf399be3978b86a004a9b7fed71800c5b7727010d15.jpg",
+        "content": "",
+        "chart_caption": [
+            "Figure 1. Synthetic response over time and distribution at day 21.\nPoints and error bars show descriptive values; error bars denote SD."
+        ],
+        "chart_footnote": [],
+        "bbox": [
+            503,
+            393,
+            919,
+            707
+        ],
+        "page_idx": 0
+    },
+    {
+        "type": "text",
+        "text": "Methods and provenance",
+        "text_level": 2,
+        "bbox": [
+            76,
+            42,
+            437,
+            68
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "PHASE0-PAGE-TWO | Mean response calculation",
+        "bbox": [
+            75,
+            83,
+            488,
+            103
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "The sample mean is computed from n independent observations:",
+        "bbox": [
+            75,
+            122,
+            601,
+            141
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "equation",
+        "text": "$$\n\\bar {x} = \\frac {1}{n} \\sum_ {i = 1} ^ {n} x _ {i}\n$$",
+        "text_format": "latex",
+        "bbox": [
+            390,
+            185,
+            555,
+            258
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "The seed and data version are retained for reproducibility.",
+        "bbox": [
+            76,
+            316,
+            544,
+            335
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "中文定位标记：正文证据需要关联原文页码或段落位置。",
+        "bbox": [
+            76,
+            352,
+            563,
+            372
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "References",
+        "text_level": 2,
+        "bbox": [
+            75,
+            440,
+            200,
+            460
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "[1] Phase Zero Team. Synthetic Fixture for Capability Tests. 2026.",
+        "bbox": [
+            76,
+            472,
+            609,
+            492
+        ],
+        "page_idx": 1
+    },
+    {
+        "type": "text",
+        "text": "This is a generated test reference, not a published paper.",
+        "bbox": [
+            76,
+            500,
+            540,
+            518
+        ],
+        "page_idx": 1
+    }
+]

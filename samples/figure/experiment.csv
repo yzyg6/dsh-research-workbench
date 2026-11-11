@@ -1,0 +1,73 @@
+﻿sample_id,group,day,response,unit
+Control_D00_01,Control,0,10.56729,a.u.
+Control_D00_02,Control,0,10.11748,a.u.
+Control_D00_03,Control,0,8.7498,a.u.
+Control_D00_04,Control,0,10.03313,a.u.
+Control_D00_05,Control,0,10.72008,a.u.
+Control_D00_06,Control,0,10.19854,a.u.
+Control_D07_01,Control,7,10.14603,a.u.
+Control_D07_02,Control,7,10.74124,a.u.
+Control_D07_03,Control,7,10.71132,a.u.
+Control_D07_04,Control,7,11.08404,a.u.
+Control_D07_05,Control,7,10.90254,a.u.
+Control_D07_06,Control,7,9.42941,a.u.
+Control_D14_01,Control,14,10.27555,a.u.
+Control_D14_02,Control,14,9.28229,a.u.
+Control_D14_03,Control,14,11.37284,a.u.
+Control_D14_04,Control,14,9.40478,a.u.
+Control_D14_05,Control,14,9.97106,a.u.
+Control_D14_06,Control,14,10.91373,a.u.
+Control_D21_01,Control,21,9.52357,a.u.
+Control_D21_02,Control,21,10.51145,a.u.
+Control_D21_03,Control,21,11.14048,a.u.
+Control_D21_04,Control,21,10.95369,a.u.
+Control_D21_05,Control,21,10.56178,a.u.
+Control_D21_06,Control,21,10.10419,a.u.
+TreatmentA_D00_01,Treatment A,0,10.66593,a.u.
+TreatmentA_D00_02,Treatment A,0,10.85367,a.u.
+TreatmentA_D00_03,Treatment A,0,10.46212,a.u.
+TreatmentA_D00_04,Treatment A,0,9.60579,a.u.
+TreatmentA_D00_05,Treatment A,0,11.55538,a.u.
+TreatmentA_D00_06,Treatment A,0,9.50358,a.u.
+TreatmentA_D07_01,Treatment A,7,11.41395,a.u.
+TreatmentA_D07_02,Treatment A,7,12.06201,a.u.
+TreatmentA_D07_03,Treatment A,7,10.22508,a.u.
+TreatmentA_D07_04,Treatment A,7,11.20298,a.u.
+TreatmentA_D07_05,Treatment A,7,11.59067,a.u.
+TreatmentA_D07_06,Treatment A,7,13.69609,a.u.
+TreatmentA_D14_01,Treatment A,14,12.35828,a.u.
+TreatmentA_D14_02,Treatment A,14,13.02677,a.u.
+TreatmentA_D14_03,Treatment A,14,13.88516,a.u.
+TreatmentA_D14_04,Treatment A,14,13.18713,a.u.
+TreatmentA_D14_05,Treatment A,14,12.71217,a.u.
+TreatmentA_D14_06,Treatment A,14,14.74079,a.u.
+TreatmentA_D21_01,Treatment A,21,14.999,a.u.
+TreatmentA_D21_02,Treatment A,21,14.63818,a.u.
+TreatmentA_D21_03,Treatment A,21,15.43819,a.u.
+TreatmentA_D21_04,Treatment A,21,14.10077,a.u.
+TreatmentA_D21_05,Treatment A,21,14.06526,a.u.
+TreatmentA_D21_06,Treatment A,21,15.33694,a.u.
+TreatmentB_D00_01,Treatment B,0,9.6993,a.u.
+TreatmentB_D00_02,Treatment B,0,8.27061,a.u.
+TreatmentB_D00_03,Treatment B,0,9.81405,a.u.
+TreatmentB_D00_04,Treatment B,0,9.09117,a.u.
+TreatmentB_D00_05,Treatment B,0,9.03051,a.u.
+TreatmentB_D00_06,Treatment B,0,10.20008,a.u.
+TreatmentB_D07_01,Treatment B,7,13.08824,a.u.
+TreatmentB_D07_02,Treatment B,7,12.17476,a.u.
+TreatmentB_D07_03,Treatment B,7,12.48042,a.u.
+TreatmentB_D07_04,Treatment B,7,12.59624,a.u.
+TreatmentB_D07_05,Treatment B,7,11.82031,a.u.
+TreatmentB_D07_06,Treatment B,7,11.65734,a.u.
+TreatmentB_D14_01,Treatment B,14,16.1027,a.u.
+TreatmentB_D14_02,Treatment B,14,14.93538,a.u.
+TreatmentB_D14_03,Treatment B,14,15.25101,a.u.
+TreatmentB_D14_04,Treatment B,14,15.41346,a.u.
+TreatmentB_D14_05,Treatment B,14,13.56452,a.u.
+TreatmentB_D14_06,Treatment B,14,15.22385,a.u.
+TreatmentB_D21_01,Treatment B,21,17.55378,a.u.
+TreatmentB_D21_02,Treatment B,21,16.60073,a.u.
+TreatmentB_D21_03,Treatment B,21,18.17343,a.u.
+TreatmentB_D21_04,Treatment B,21,18.18029,a.u.
+TreatmentB_D21_05,Treatment B,21,17.32949,a.u.
+TreatmentB_D21_06,Treatment B,21,18.97875,a.u.

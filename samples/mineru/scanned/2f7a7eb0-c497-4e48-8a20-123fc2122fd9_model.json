@@ -1,0 +1,333 @@
+[
+    [
+        {
+            "type": "paragraph_title",
+            "bbox": [
+                0.077,
+                0.041,
+                0.35,
+                0.069
+            ],
+            "angle": 0,
+            "content": "阶段零合成实验资料"
+        },
+        {
+            "type": "text",
+            "bbox": [
+                0.076,
+                0.084,
+                0.491,
+                0.104
+            ],
+            "angle": 0,
+            "content": "PHASE0-PAGE-ONE | Synthetic experiment, 2026",
+            "merge_prev": false
+        },
+        {
+            "type": "text",
+            "bbox": [
+                0.076,
+                0.114,
+                0.599,
+                0.158
+            ],
+            "angle": 0,
+            "content": "Three groups; four time points; six independent samples per cell. Response measurements are synthetic and use arbitrary units.",
+            "merge_prev": false
+        },
+        {
+            "type": "image_caption",
+            "bbox": [
+                0.078,
+                0.178,
+                0.318,
+                0.196
+            ],
+            "angle": 0,
+            "content": "Table 1. Experimental design"
+        },
+        {
+            "type": "table",
+            "bbox": [
+                0.079,
+                0.2,
+                0.892,
+                0.33
+            ],
+            "angle": 0,
+            "content": "<table><tr><td>Group</td><td>Days</td><td>n per day</td></tr><tr><td>Control</td><td>0, 7, 14, 21</td><td>6</td></tr><tr><td>Treatment A</td><td>0, 7, 14, 21</td><td>6</td></tr><tr><td>Treatment B</td><td>0, 7, 14, 21</td><td>6</td></tr></table>"
+        },
+        {
+            "type": "chart",
+            "bbox": [
+                0.079,
+                0.396,
+                0.498,
+                0.708
+            ],
+            "angle": 0,
+            "content": null
+        },
+        {
+            "type": "chart",
+            "bbox": [
+                0.504,
+                0.395,
+                0.92,
+                0.708
+            ],
+            "angle": 0,
+            "content": null
+        },
+        {
+            "type": "image_caption",
+            "bbox": [
+                0.076,
+                0.722,
+                0.582,
+                0.766
+            ],
+            "angle": 0,
+            "content": "Figure 1. Synthetic response over time and distribution at day 21.\nPoints and error bars show descriptive values; error bars denote SD."
+        },
+        {
+            "type": "ocr_text",
+            "bbox": [
+                0.082,
+                0.043,
+                0.345,
+                0.068
+            ],
+            "text": "",
+            "score": 1.0
+        },
+        {
+            "type": "ocr_text",
+            "bbox": [
+                0.081,
+                0.086,
+                0.486,
+                0.103
+            ],
+            "text": "",
+            "score": 1.0
+        },
+        {
+            "type": "ocr_text",
+            "bbox": [
+                0.082,
+                0.117,
+                0.596,
+                0.132
+            ],
+            "text": "",
+            "score": 1.0
+        },
+        {
+            "type": "ocr_text",
+            "bbox": [
+                0.081,
+                0.14,
+                0.58,
+                0.155
+            ],
+            "text": "",
+            "score": 1.0
+        }
+    ],
+    [
+        {
+            "type": "paragraph_title",
+            "bbox": [
+                0.078,
+                0.044,
+                0.439,
+                0.069
+            ],
+            "angle": 0,
+            "content": "Methods and provenance"
+        },
+        {
+            "type": "text",
+            "bbox": [
+                0.076,
+                0.084,
+                0.489,
+                0.104
+            ],
+            "angle": 0,
+            "content": "PHASE0-PAGE-TWO | Mean response calculation",
+            "merge_prev": false
+        },
+        {
+            "type": "text",
+            "bbox": [
+                0.076,
+                0.123,
+                0.602,
+                0.142
+            ],
+            "angle": 0,
+            "content": "The sample mean is computed from n independent observations:",
+            "merge_prev": false
+        },
+        {
+            "type": "equation",
+            "bbox": [
+                0.391,
+                0.186,
+                0.557,
+                0.26
+            ],
+            "angle": 0,
+            "content": "\\[\n\\bar {x} = \\frac {1}{n} \\sum_ {i = 1} ^ {n} x _ {i}\n\\]"
+        },
+        {
+            "type": "text",
+            "bbox": [
+                0.077,
+                0.317,
+                0.545,
+                0.336
+            ],
+            "angle": 0,
+            "content": "The seed and data version are retained for reproducibility.",
+            "merge_prev": false
+        },
+        {
+            "type": "text",
+            "bbox": [
+                0.077,
+                0.353,
+                0.564,
+                0.373
+            ],
+            "angle": 0,
+            "content": "中文定位标记：正文证据需要关联原文页码或段落位置。",
+            "merge_prev": false
+        },
+        {
+            "type": "paragraph_title",
+            "bbox": [
+                0.076,
+                0.441,
+                0.201,
+                0.461
+            ],
+            "angle": 0,
+            "content": "References"
+        },
+        {
+            "type": "text",
+            "bbox": [
+                0.077,
+                0.473,
+                0.61,
+                0.493
+            ],
+            "angle": 0,
+            "content": "[1] Phase Zero Team. Synthetic Fixture for Capability Tests. 2026.",
+            "merge_prev": false
+        },
+        {
+            "type": "text",
+            "bbox": [
+                0.077,
+                0.501,
+                0.541,
+                0.52
+            ],
+            "angle": 0,
+            "content": "This is a generated test reference, not a published paper.",
+            "merge_prev": false
+        },
+        {
+            "type": "ocr_text",
+            "bbox": [
+                0.08,
+                0.043,
+                0.437,
+                0.07
+            ],
+            "text": "",
+            "score": 1.0
+        },
+        {
+            "type": "ocr_text",
+            "bbox": [
+                0.08,
+                0.085,
+                0.485,
+                0.105
+            ],
+            "text": "",
+            "score": 1.0
+        },
+        {
+            "type": "ocr_text",
+            "bbox": [
+                0.082,
+                0.125,
+                0.599,
+                0.139
+            ],
+            "text": "",
+            "score": 1.0
+        },
+        {
+            "type": "ocr_text",
+            "bbox": [
+                0.081,
+                0.318,
+                0.541,
+                0.334
+            ],
+            "text": "",
+            "score": 1.0
+        },
+        {
+            "type": "ocr_text",
+            "bbox": [
+                0.084,
+                0.356,
+                0.559,
+                0.37
+            ],
+            "text": "",
+            "score": 1.0
+        },
+        {
+            "type": "ocr_text",
+            "bbox": [
+                0.081,
+                0.442,
+                0.197,
+                0.462
+            ],
+            "text": "",
+            "score": 1.0
+        },
+        {
+            "type": "ocr_text",
+            "bbox": [
+                0.081,
+                0.475,
+                0.607,
+                0.49
+            ],
+            "text": "",
+            "score": 1.0
+        },
+        {
+            "type": "ocr_text",
+            "bbox": [
+                0.081,
+                0.502,
+                0.536,
+                0.519
+            ],
+            "text": "",
+            "score": 1.0
+        }
+    ]
+]

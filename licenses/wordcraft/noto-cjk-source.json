@@ -1,0 +1,11 @@
+{
+  "family": "Noto Sans CJK SC",
+  "name": "NotoSansCJKsc-Regular.woff2",
+  "bytes": 11423348,
+  "sha256": "689db17ebf1a1dc29b075c42d27a3101f4f91e888ded96dfe54af3d5df9faefa",
+  "sourceSha256": "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b",
+  "source": "https://github.com/notofonts/noto-cjk/blob/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf",
+  "conversion": "Lossless WOFF2 container, full cmap preserved",
+  "copyright": "© 2014-2021 Adobe (http://www.adobe.com/).",
+  "license": "SIL Open Font License 1.1, OFL-noto-cjk-runtime.txt"
+}

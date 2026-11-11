@@ -1,0 +1,10 @@
+{
+  "name": "research-workbench-build",
+  "private": true,
+  "dependencies": {
+    "esbuild": "0.25.12",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "react-test-renderer": "19.2.0"
+  }
+}

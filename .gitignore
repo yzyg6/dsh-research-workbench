@@ -1,0 +1,38 @@
+# Local research, diagnostics, credentials and build dependencies
+_scratch/
+workspace/
+validation/
+releases/
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+.env
+.env.*
+*.log
+*.sqlite
+*.sqlite-*
+*.db
+*.pem
+*.key
+.DS_Store
+Thumbs.db
+# Local development history and machine-specific instructions
+/*.md
+!/README.md
+!/THIRD_PARTY_NOTICES.md
+# Publish only offline synthetic fixture generators and test harnesses
+/probes/*
+!/probes/word-reader/
+/probes/word-reader/*
+!/probes/word-reader/create-fixture.py
+!/probes/word-edit/
+/probes/word-edit/*
+!/probes/word-edit/create-rich-fixture.py
+!/probes/word-edit/create-format-fixture.py
+!/probes/word-opening/
+/probes/word-opening/*
+!/probes/word-opening/create-fixture.py
+!/probes/word-flow/
+/probes/word-flow/*
+!/probes/word-flow/harness.mjs

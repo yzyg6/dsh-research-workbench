@@ -1,0 +1,26 @@
+[
+  {
+    "id": "t-dsh-research-workbench-scratch-out-fixtures-electronic-pdf-0",
+    "index": 0,
+    "heading": "",
+    "text": "PHASE0-PAGE-ONE | Synthetic experiment, 2026\n\nThree groups; four time points; six independent samples per cell. Response measurements are synthetic and use arbitrary units.\n\nTable 1. Experimental design\n\n<table><tr><td>Group</td><td>Days</td><td>n per day</td></tr><tr><td>Control</td><td>0, 7, 14, 21</td><td>6</td></tr><tr><td>Treatment A</td><td>0, 7, 14, 21</td><td>6</td></tr><tr><td>Treatment B</td><td>0, 7, 14, 21</td><td>6</td></tr></table>\n\n![](images/161e685e2af670e9983f5cac5cf35101ab5e562104e0eda435ff18f942ba312e.jpg)  \nFigure 1. Synthetic response over time and distribution at day 21.\n\n![](images/355238de83f9582bda1d4b1888b0c21ae4a3990fc409e11ceccd8b9ae574c752.jpg)  \nPoints and error bars show descriptive values; error bars denote SD.",
+    "chars": 753,
+    "source": "T:\\下载\\dsh-research-workbench\\_scratch\\out\\fixtures\\electronic.pdf"
+  },
+  {
+    "id": "t-dsh-research-workbench-scratch-out-fixtures-electronic-pdf-1",
+    "index": 1,
+    "heading": "Methods and provenance",
+    "text": "## Methods and provenance\n\nPHASE0-PAGE-TWO | Mean response calculation\n\nThe sample mean is computed from n independent observations:\n\n$$\n\\bar {x} = \\frac {1}{n} \\sum_ {i = 1} ^ {n} x _ {i}\n$$\n\nThe seed and data version are retained for reproducibility.\n\n中文定位标记：正文证据需要关联原文页码或段落位置。",
+    "chars": 279,
+    "source": "T:\\下载\\dsh-research-workbench\\_scratch\\out\\fixtures\\electronic.pdf"
+  },
+  {
+    "id": "t-dsh-research-workbench-scratch-out-fixtures-electronic-pdf-2",
+    "index": 2,
+    "heading": "References",
+    "text": "## References\n\n[1] Phase Zero Team. Synthetic Fixture for Capability Tests. 2026.\n\nThis is a generated test reference, not a published paper.",
+    "chars": 141,
+    "source": "T:\\下载\\dsh-research-workbench\\_scratch\\out\\fixtures\\electronic.pdf"
+  }
+]

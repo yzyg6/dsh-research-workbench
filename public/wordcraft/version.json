@@ -1,0 +1,33 @@
+{
+  "name": "Wordcraft",
+  "version": "0.17.0",
+  "source": "https://github.com/storytold/wordcraft",
+  "commit": "5574b32600aa7d782c64f5a6c6bb24696152220d",
+  "releaseArchiveSha256": "713f5e4b01427eb262c70e280e55d1354fa530e5a351b9751ebbe37398ea2ed0",
+  "wasmSha256": "01cf0e77096540149d51d302546bc805f74ba4fef3e2e00f87799422c771c58d",
+  "wasmBytes": 60340672,
+  "modifications": "Unmodified upstream WASM, gzip compressed. Generated JS bundled to resolve its eframe snippet locally; separate DSH host integration.",
+  "assets": {
+    "wordcraft-0.17.0-bridge.js": {
+      "bytes": 88073,
+      "sha256": "19ef1d65b9a26c8972c22d3a03d9f8967c51a413b4aad529f62a272288fb9ae7"
+    },
+    "wordcraft-0.17.0.wasm.gz": {
+      "bytes": 22455178,
+      "sha256": "7a9e48239a507886d99870759ed09260afb9ab9b1c05355dbf8e50631b9f285a"
+    },
+    "NotoSansCJKsc-Regular.woff2": {
+      "bytes": 11423348,
+      "sha256": "689db17ebf1a1dc29b075c42d27a3101f4f91e888ded96dfe54af3d5df9faefa"
+    }
+  },
+  "chineseFont": {
+    "family": "Noto Sans CJK SC",
+    "name": "NotoSansCJKsc-Regular.woff2",
+    "bytes": 11423348,
+    "sha256": "689db17ebf1a1dc29b075c42d27a3101f4f91e888ded96dfe54af3d5df9faefa",
+    "sourceSha256": "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b",
+    "source": "https://github.com/notofonts/noto-cjk/blob/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf",
+    "conversion": "Lossless WOFF2 container, full cmap preserved"
+  }
+}

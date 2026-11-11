@@ -1,0 +1,30 @@
+{
+  "revision": 3,
+  "settings": {
+    "font_size": 9,
+    "line_width": 1,
+    "color_a": "#457b9d",
+    "legend": "upper left",
+    "x_min": -1,
+    "x_max": 22,
+    "width_cm": 15,
+    "height_cm": 7.2
+  },
+  "render": {
+    "rows": 72,
+    "combinations": 12,
+    "all_n_six": true,
+    "statistics_match": true,
+    "png_hash": "601c33eb07c39ba39109f2f14109fdba997bd0188a5346ef6de49d02ab1423e2",
+    "state": {
+      "font_size": 9,
+      "line_width": 1,
+      "color_a": "#457b9d",
+      "legend": "upper left",
+      "x_min": -1,
+      "x_max": 22,
+      "width_cm": 15,
+      "height_cm": 7.2
+    }
+  }
+}

@@ -1,0 +1,5 @@
+* text=auto eol=lf
+public/wordcraft/** -text
+*.png binary
+*.woff2 binary
+*.gz binary

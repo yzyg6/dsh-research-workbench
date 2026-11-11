@@ -1,0 +1,1252 @@
+{
+    "pdf_info": [
+        {
+            "preproc_blocks": [
+                {
+                    "bbox": [
+                        47,
+                        32,
+                        214,
+                        54
+                    ],
+                    "type": "title",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                47,
+                                32,
+                                214,
+                                54
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        47,
+                                        32,
+                                        214,
+                                        54
+                                    ],
+                                    "type": "text",
+                                    "content": "阶段零合成实验资料"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 0,
+                    "level": 2
+                },
+                {
+                    "bbox": [
+                        46,
+                        66,
+                        300,
+                        82
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                46,
+                                66,
+                                300,
+                                82
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        46,
+                                        66,
+                                        300,
+                                        82
+                                    ],
+                                    "type": "text",
+                                    "content": "PHASE0-PAGE-ONE | Synthetic experiment, 2026"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 1,
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        46,
+                        90,
+                        366,
+                        125
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                46,
+                                90,
+                                366,
+                                125
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        46,
+                                        90,
+                                        366,
+                                        125
+                                    ],
+                                    "type": "text",
+                                    "content": "Three groups; four time points; six independent samples per cell. Response measurements are synthetic and use arbitrary units."
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 2,
+                    "merge_prev": false
+                },
+                {
+                    "type": "table",
+                    "bbox": [
+                        48,
+                        158,
+                        545,
+                        261
+                    ],
+                    "blocks": [
+                        {
+                            "bbox": [
+                                47,
+                                140,
+                                194,
+                                155
+                            ],
+                            "type": "table_caption",
+                            "angle": 0,
+                            "lines": [
+                                {
+                                    "bbox": [
+                                        47,
+                                        140,
+                                        194,
+                                        155
+                                    ],
+                                    "spans": [
+                                        {
+                                            "bbox": [
+                                                47,
+                                                140,
+                                                194,
+                                                155
+                                            ],
+                                            "type": "text",
+                                            "content": "Table 1. Experimental design"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "index": 3
+                        },
+                        {
+                            "bbox": [
+                                48,
+                                158,
+                                545,
+                                261
+                            ],
+                            "type": "table_body",
+                            "angle": 0,
+                            "lines": [
+                                {
+                                    "bbox": [
+                                        48,
+                                        158,
+                                        545,
+                                        261
+                                    ],
+                                    "spans": [
+                                        {
+                                            "bbox": [
+                                                48,
+                                                158,
+                                                545,
+                                                261
+                                            ],
+                                            "type": "table",
+                                            "html": "<table><tr><td>Group</td><td>Days</td><td>n per day</td></tr><tr><td>Control</td><td>0, 7, 14, 21</td><td>6</td></tr><tr><td>Treatment A</td><td>0, 7, 14, 21</td><td>6</td></tr><tr><td>Treatment B</td><td>0, 7, 14, 21</td><td>6</td></tr></table>",
+                                            "image_path": "e47d6f6b4200eefbca95ce523c6d18ab8e6c342a60d9d61fd75c47be03f3b5fa.jpg"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "index": 4
+                        }
+                    ],
+                    "index": 4
+                },
+                {
+                    "type": "chart",
+                    "bbox": [
+                        48,
+                        313,
+                        304,
+                        560
+                    ],
+                    "blocks": [
+                        {
+                            "bbox": [
+                                48,
+                                313,
+                                304,
+                                560
+                            ],
+                            "type": "chart_body",
+                            "angle": 0,
+                            "lines": [
+                                {
+                                    "bbox": [
+                                        48,
+                                        313,
+                                        304,
+                                        560
+                                    ],
+                                    "spans": [
+                                        {
+                                            "bbox": [
+                                                48,
+                                                313,
+                                                304,
+                                                560
+                                            ],
+                                            "type": "chart",
+                                            "image_path": "33a2ef9289a9ca60e89802b9ac7204fea80c8a00d172c1b0034ef1101cf208af.jpg"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "index": 5
+                        }
+                    ],
+                    "index": 5
+                },
+                {
+                    "type": "chart",
+                    "bbox": [
+                        308,
+                        312,
+                        563,
+                        560
+                    ],
+                    "blocks": [
+                        {
+                            "bbox": [
+                                308,
+                                312,
+                                563,
+                                560
+                            ],
+                            "type": "chart_body",
+                            "angle": 0,
+                            "lines": [
+                                {
+                                    "bbox": [
+                                        308,
+                                        312,
+                                        563,
+                                        560
+                                    ],
+                                    "spans": [
+                                        {
+                                            "bbox": [
+                                                308,
+                                                312,
+                                                563,
+                                                560
+                                            ],
+                                            "type": "chart",
+                                            "image_path": "4ad93309a3f0ae8bd9f1ccf399be3978b86a004a9b7fed71800c5b7727010d15.jpg"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "index": 6
+                        },
+                        {
+                            "bbox": [
+                                46,
+                                571,
+                                356,
+                                606
+                            ],
+                            "type": "chart_caption",
+                            "angle": 0,
+                            "lines": [
+                                {
+                                    "bbox": [
+                                        46,
+                                        571,
+                                        356,
+                                        606
+                                    ],
+                                    "spans": [
+                                        {
+                                            "bbox": [
+                                                46,
+                                                571,
+                                                356,
+                                                606
+                                            ],
+                                            "type": "text",
+                                            "content": "Figure 1. Synthetic response over time and distribution at day 21.\nPoints and error bars show descriptive values; error bars denote SD."
+                                        }
+                                    ]
+                                }
+                            ],
+                            "index": 7
+                        }
+                    ],
+                    "index": 6
+                }
+            ],
+            "discarded_blocks": [],
+            "page_size": [
+                612,
+                792
+            ],
+            "page_idx": 0,
+            "para_blocks": [
+                {
+                    "bbox": [
+                        47,
+                        32,
+                        214,
+                        54
+                    ],
+                    "type": "title",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                47,
+                                32,
+                                214,
+                                54
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        47,
+                                        32,
+                                        214,
+                                        54
+                                    ],
+                                    "type": "text",
+                                    "content": "阶段零合成实验资料"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 0,
+                    "level": 2
+                },
+                {
+                    "bbox": [
+                        46,
+                        66,
+                        300,
+                        82
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                46,
+                                66,
+                                300,
+                                82
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        46,
+                                        66,
+                                        300,
+                                        82
+                                    ],
+                                    "type": "text",
+                                    "content": "PHASE0-PAGE-ONE | Synthetic experiment, 2026"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 1,
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        46,
+                        90,
+                        366,
+                        125
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                46,
+                                90,
+                                366,
+                                125
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        46,
+                                        90,
+                                        366,
+                                        125
+                                    ],
+                                    "type": "text",
+                                    "content": "Three groups; four time points; six independent samples per cell. Response measurements are synthetic and use arbitrary units."
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 2,
+                    "merge_prev": false
+                },
+                {
+                    "type": "table",
+                    "bbox": [
+                        48,
+                        158,
+                        545,
+                        261
+                    ],
+                    "blocks": [
+                        {
+                            "bbox": [
+                                47,
+                                140,
+                                194,
+                                155
+                            ],
+                            "type": "table_caption",
+                            "angle": 0,
+                            "lines": [
+                                {
+                                    "bbox": [
+                                        47,
+                                        140,
+                                        194,
+                                        155
+                                    ],
+                                    "spans": [
+                                        {
+                                            "bbox": [
+                                                47,
+                                                140,
+                                                194,
+                                                155
+                                            ],
+                                            "type": "text",
+                                            "content": "Table 1. Experimental design"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "index": 3
+                        },
+                        {
+                            "bbox": [
+                                48,
+                                158,
+                                545,
+                                261
+                            ],
+                            "type": "table_body",
+                            "angle": 0,
+                            "lines": [
+                                {
+                                    "bbox": [
+                                        48,
+                                        158,
+                                        545,
+                                        261
+                                    ],
+                                    "spans": [
+                                        {
+                                            "bbox": [
+                                                48,
+                                                158,
+                                                545,
+                                                261
+                                            ],
+                                            "type": "table",
+                                            "html": "<table><tr><td>Group</td><td>Days</td><td>n per day</td></tr><tr><td>Control</td><td>0, 7, 14, 21</td><td>6</td></tr><tr><td>Treatment A</td><td>0, 7, 14, 21</td><td>6</td></tr><tr><td>Treatment B</td><td>0, 7, 14, 21</td><td>6</td></tr></table>",
+                                            "image_path": "e47d6f6b4200eefbca95ce523c6d18ab8e6c342a60d9d61fd75c47be03f3b5fa.jpg"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "index": 4
+                        }
+                    ],
+                    "index": 4
+                },
+                {
+                    "type": "chart",
+                    "bbox": [
+                        48,
+                        313,
+                        304,
+                        560
+                    ],
+                    "blocks": [
+                        {
+                            "bbox": [
+                                48,
+                                313,
+                                304,
+                                560
+                            ],
+                            "type": "chart_body",
+                            "angle": 0,
+                            "lines": [
+                                {
+                                    "bbox": [
+                                        48,
+                                        313,
+                                        304,
+                                        560
+                                    ],
+                                    "spans": [
+                                        {
+                                            "bbox": [
+                                                48,
+                                                313,
+                                                304,
+                                                560
+                                            ],
+                                            "type": "chart",
+                                            "image_path": "33a2ef9289a9ca60e89802b9ac7204fea80c8a00d172c1b0034ef1101cf208af.jpg"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "index": 5
+                        }
+                    ],
+                    "index": 5
+                },
+                {
+                    "type": "chart",
+                    "bbox": [
+                        308,
+                        312,
+                        563,
+                        560
+                    ],
+                    "blocks": [
+                        {
+                            "bbox": [
+                                308,
+                                312,
+                                563,
+                                560
+                            ],
+                            "type": "chart_body",
+                            "angle": 0,
+                            "lines": [
+                                {
+                                    "bbox": [
+                                        308,
+                                        312,
+                                        563,
+                                        560
+                                    ],
+                                    "spans": [
+                                        {
+                                            "bbox": [
+                                                308,
+                                                312,
+                                                563,
+                                                560
+                                            ],
+                                            "type": "chart",
+                                            "image_path": "4ad93309a3f0ae8bd9f1ccf399be3978b86a004a9b7fed71800c5b7727010d15.jpg"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "index": 6
+                        },
+                        {
+                            "bbox": [
+                                46,
+                                571,
+                                356,
+                                606
+                            ],
+                            "type": "chart_caption",
+                            "angle": 0,
+                            "lines": [
+                                {
+                                    "bbox": [
+                                        46,
+                                        571,
+                                        356,
+                                        606
+                                    ],
+                                    "spans": [
+                                        {
+                                            "bbox": [
+                                                46,
+                                                571,
+                                                356,
+                                                606
+                                            ],
+                                            "type": "text",
+                                            "content": "Figure 1. Synthetic response over time and distribution at day 21.\nPoints and error bars show descriptive values; error bars denote SD."
+                                        }
+                                    ]
+                                }
+                            ],
+                            "index": 7
+                        }
+                    ],
+                    "index": 6
+                }
+            ]
+        },
+        {
+            "preproc_blocks": [
+                {
+                    "bbox": [
+                        47,
+                        34,
+                        268,
+                        54
+                    ],
+                    "type": "title",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                47,
+                                34,
+                                268,
+                                54
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        47,
+                                        34,
+                                        268,
+                                        54
+                                    ],
+                                    "type": "text",
+                                    "content": "Methods and provenance"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 0,
+                    "level": 2
+                },
+                {
+                    "bbox": [
+                        46,
+                        66,
+                        299,
+                        82
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                46,
+                                66,
+                                299,
+                                82
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        46,
+                                        66,
+                                        299,
+                                        82
+                                    ],
+                                    "type": "text",
+                                    "content": "PHASE0-PAGE-TWO | Mean response calculation"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 1,
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        46,
+                        97,
+                        368,
+                        112
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                46,
+                                97,
+                                368,
+                                112
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        46,
+                                        97,
+                                        368,
+                                        112
+                                    ],
+                                    "type": "text",
+                                    "content": "The sample mean is computed from n independent observations:"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 2,
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        239,
+                        147,
+                        340,
+                        205
+                    ],
+                    "type": "interline_equation",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                239,
+                                147,
+                                340,
+                                205
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        239,
+                                        147,
+                                        340,
+                                        205
+                                    ],
+                                    "type": "interline_equation",
+                                    "content": "\\bar {x} = \\frac {1}{n} \\sum_ {i = 1} ^ {n} x _ {i}",
+                                    "image_path": "fe3d9c1267faa33cd4dde77edbf732579e0f7b2dfa6443b1a7abf12b63816596.jpg"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 3
+                },
+                {
+                    "bbox": [
+                        47,
+                        251,
+                        333,
+                        266
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                47,
+                                251,
+                                333,
+                                266
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        47,
+                                        251,
+                                        333,
+                                        266
+                                    ],
+                                    "type": "text",
+                                    "content": "The seed and data version are retained for reproducibility."
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 4,
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        47,
+                        279,
+                        345,
+                        295
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                47,
+                                279,
+                                345,
+                                295
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        47,
+                                        279,
+                                        345,
+                                        295
+                                    ],
+                                    "type": "text",
+                                    "content": "中文定位标记：正文证据需要关联原文页码或段落位置。"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 5,
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        46,
+                        349,
+                        123,
+                        365
+                    ],
+                    "type": "title",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                46,
+                                349,
+                                123,
+                                365
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        46,
+                                        349,
+                                        123,
+                                        365
+                                    ],
+                                    "type": "text",
+                                    "content": "References"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 6,
+                    "level": 2
+                },
+                {
+                    "bbox": [
+                        47,
+                        374,
+                        373,
+                        390
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                47,
+                                374,
+                                373,
+                                390
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        47,
+                                        374,
+                                        373,
+                                        390
+                                    ],
+                                    "type": "text",
+                                    "content": "[1] Phase Zero Team. Synthetic Fixture for Capability Tests. 2026."
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 7,
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        47,
+                        396,
+                        331,
+                        411
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                47,
+                                396,
+                                331,
+                                411
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        47,
+                                        396,
+                                        331,
+                                        411
+                                    ],
+                                    "type": "text",
+                                    "content": "This is a generated test reference, not a published paper."
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 8,
+                    "merge_prev": false
+                }
+            ],
+            "discarded_blocks": [],
+            "page_size": [
+                612,
+                792
+            ],
+            "page_idx": 1,
+            "para_blocks": [
+                {
+                    "bbox": [
+                        47,
+                        34,
+                        268,
+                        54
+                    ],
+                    "type": "title",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                47,
+                                34,
+                                268,
+                                54
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        47,
+                                        34,
+                                        268,
+                                        54
+                                    ],
+                                    "type": "text",
+                                    "content": "Methods and provenance"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 0,
+                    "level": 2
+                },
+                {
+                    "bbox": [
+                        46,
+                        66,
+                        299,
+                        82
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                46,
+                                66,
+                                299,
+                                82
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        46,
+                                        66,
+                                        299,
+                                        82
+                                    ],
+                                    "type": "text",
+                                    "content": "PHASE0-PAGE-TWO | Mean response calculation"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 1,
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        46,
+                        97,
+                        368,
+                        112
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                46,
+                                97,
+                                368,
+                                112
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        46,
+                                        97,
+                                        368,
+                                        112
+                                    ],
+                                    "type": "text",
+                                    "content": "The sample mean is computed from n independent observations:"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 2,
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        239,
+                        147,
+                        340,
+                        205
+                    ],
+                    "type": "interline_equation",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                239,
+                                147,
+                                340,
+                                205
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        239,
+                                        147,
+                                        340,
+                                        205
+                                    ],
+                                    "type": "interline_equation",
+                                    "content": "\\bar {x} = \\frac {1}{n} \\sum_ {i = 1} ^ {n} x _ {i}",
+                                    "image_path": "fe3d9c1267faa33cd4dde77edbf732579e0f7b2dfa6443b1a7abf12b63816596.jpg"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 3
+                },
+                {
+                    "bbox": [
+                        47,
+                        251,
+                        333,
+                        266
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                47,
+                                251,
+                                333,
+                                266
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        47,
+                                        251,
+                                        333,
+                                        266
+                                    ],
+                                    "type": "text",
+                                    "content": "The seed and data version are retained for reproducibility."
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 4,
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        47,
+                        279,
+                        345,
+                        295
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                47,
+                                279,
+                                345,
+                                295
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        47,
+                                        279,
+                                        345,
+                                        295
+                                    ],
+                                    "type": "text",
+                                    "content": "中文定位标记：正文证据需要关联原文页码或段落位置。"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 5,
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        46,
+                        349,
+                        123,
+                        365
+                    ],
+                    "type": "title",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                46,
+                                349,
+                                123,
+                                365
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        46,
+                                        349,
+                                        123,
+                                        365
+                                    ],
+                                    "type": "text",
+                                    "content": "References"
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 6,
+                    "level": 2
+                },
+                {
+                    "bbox": [
+                        47,
+                        374,
+                        373,
+                        390
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                47,
+                                374,
+                                373,
+                                390
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        47,
+                                        374,
+                                        373,
+                                        390
+                                    ],
+                                    "type": "text",
+                                    "content": "[1] Phase Zero Team. Synthetic Fixture for Capability Tests. 2026."
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 7,
+                    "merge_prev": false
+                },
+                {
+                    "bbox": [
+                        47,
+                        396,
+                        331,
+                        411
+                    ],
+                    "type": "text",
+                    "angle": 0,
+                    "lines": [
+                        {
+                            "bbox": [
+                                47,
+                                396,
+                                331,
+                                411
+                            ],
+                            "spans": [
+                                {
+                                    "bbox": [
+                                        47,
+                                        396,
+                                        331,
+                                        411
+                                    ],
+                                    "type": "text",
+                                    "content": "This is a generated test reference, not a published paper."
+                                }
+                            ]
+                        }
+                    ],
+                    "index": 8,
+                    "merge_prev": false
+                }
+            ]
+        }
+    ],
+    "_backend": "hybrid",
+    "_effort": "medium",
+    "_ocr_enable": true,
+    "_version_name": "3.4.4"
+}

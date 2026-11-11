@@ -1,0 +1,15 @@
+{
+  "name": "research-workbench-phase0-editor-probe",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@tiptap/core": "3.33.0",
+    "@tiptap/starter-kit": "3.33.0",
+    "@tiptap/markdown": "3.33.0",
+    "@tiptap/extension-mathematics": "3.33.0",
+    "@tiptap/extension-table": "3.33.0",
+    "@tiptap/extension-image": "3.33.0",
+    "@tiptap/extension-unique-id": "3.33.0",
+    "esbuild": "0.25.12"
+  }
+}

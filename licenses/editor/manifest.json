@@ -1,0 +1,302 @@
+[
+  {
+    "package": "katex",
+    "version": "0.18.10",
+    "license": "MIT",
+    "file": "licenses/editor/katex.txt"
+  },
+  {
+    "package": "linkifyjs",
+    "version": "4.4.0",
+    "license": "MIT",
+    "file": "licenses/editor/linkifyjs.txt"
+  },
+  {
+    "package": "marked",
+    "version": "17.0.6",
+    "license": "MIT",
+    "file": "licenses/editor/marked.txt"
+  },
+  {
+    "package": "orderedmap",
+    "version": "2.1.1",
+    "license": "MIT",
+    "file": "licenses/editor/orderedmap.txt"
+  },
+  {
+    "package": "prosemirror-changeset",
+    "version": "2.4.6",
+    "license": "MIT",
+    "file": "licenses/editor/prosemirror-changeset.txt"
+  },
+  {
+    "package": "prosemirror-commands",
+    "version": "1.7.2",
+    "license": "MIT",
+    "file": "licenses/editor/prosemirror-commands.txt"
+  },
+  {
+    "package": "prosemirror-dropcursor",
+    "version": "1.8.4",
+    "license": "MIT",
+    "file": "licenses/editor/prosemirror-dropcursor.txt"
+  },
+  {
+    "package": "prosemirror-gapcursor",
+    "version": "1.4.1",
+    "license": "MIT",
+    "file": "licenses/editor/prosemirror-gapcursor.txt"
+  },
+  {
+    "package": "prosemirror-history",
+    "version": "1.5.1",
+    "license": "MIT",
+    "file": "licenses/editor/prosemirror-history.txt"
+  },
+  {
+    "package": "prosemirror-inputrules",
+    "version": "1.5.1",
+    "license": "MIT",
+    "file": "licenses/editor/prosemirror-inputrules.txt"
+  },
+  {
+    "package": "prosemirror-keymap",
+    "version": "1.2.3",
+    "license": "MIT",
+    "file": "licenses/editor/prosemirror-keymap.txt"
+  },
+  {
+    "package": "prosemirror-model",
+    "version": "1.25.13",
+    "license": "MIT",
+    "file": "licenses/editor/prosemirror-model.txt"
+  },
+  {
+    "package": "prosemirror-schema-list",
+    "version": "1.6.0",
+    "license": "MIT",
+    "file": "licenses/editor/prosemirror-schema-list.txt"
+  },
+  {
+    "package": "prosemirror-state",
+    "version": "1.4.4",
+    "license": "MIT",
+    "file": "licenses/editor/prosemirror-state.txt"
+  },
+  {
+    "package": "prosemirror-tables",
+    "version": "1.8.5",
+    "license": "MIT",
+    "file": "licenses/editor/prosemirror-tables.txt"
+  },
+  {
+    "package": "prosemirror-transform",
+    "version": "1.12.5",
+    "license": "MIT",
+    "file": "licenses/editor/prosemirror-transform.txt"
+  },
+  {
+    "package": "prosemirror-view",
+    "version": "1.42.9",
+    "license": "MIT",
+    "file": "licenses/editor/prosemirror-view.txt"
+  },
+  {
+    "package": "rope-sequence",
+    "version": "1.3.4",
+    "license": "MIT",
+    "file": "licenses/editor/rope-sequence.txt"
+  },
+  {
+    "package": "uuid",
+    "version": "14.0.3",
+    "license": "MIT",
+    "file": "licenses/editor/uuid.txt"
+  },
+  {
+    "package": "w3c-keyname",
+    "version": "2.2.8",
+    "license": "MIT",
+    "file": "licenses/editor/w3c-keyname.txt"
+  },
+  {
+    "package": "@tiptap/core",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--core.txt"
+  },
+  {
+    "package": "@tiptap/extension-blockquote",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-blockquote.txt"
+  },
+  {
+    "package": "@tiptap/extension-bold",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-bold.txt"
+  },
+  {
+    "package": "@tiptap/extension-bullet-list",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-bullet-list.txt"
+  },
+  {
+    "package": "@tiptap/extension-code",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-code.txt"
+  },
+  {
+    "package": "@tiptap/extension-code-block",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-code-block.txt"
+  },
+  {
+    "package": "@tiptap/extension-document",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-document.txt"
+  },
+  {
+    "package": "@tiptap/extension-dropcursor",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-dropcursor.txt"
+  },
+  {
+    "package": "@tiptap/extension-gapcursor",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-gapcursor.txt"
+  },
+  {
+    "package": "@tiptap/extension-hard-break",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-hard-break.txt"
+  },
+  {
+    "package": "@tiptap/extension-heading",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-heading.txt"
+  },
+  {
+    "package": "@tiptap/extension-horizontal-rule",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-horizontal-rule.txt"
+  },
+  {
+    "package": "@tiptap/extension-image",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-image.txt"
+  },
+  {
+    "package": "@tiptap/extension-italic",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-italic.txt"
+  },
+  {
+    "package": "@tiptap/extension-link",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-link.txt"
+  },
+  {
+    "package": "@tiptap/extension-list",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-list.txt"
+  },
+  {
+    "package": "@tiptap/extension-list-item",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-list-item.txt"
+  },
+  {
+    "package": "@tiptap/extension-list-keymap",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-list-keymap.txt"
+  },
+  {
+    "package": "@tiptap/extension-mathematics",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-mathematics.txt"
+  },
+  {
+    "package": "@tiptap/extension-ordered-list",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-ordered-list.txt"
+  },
+  {
+    "package": "@tiptap/extension-paragraph",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-paragraph.txt"
+  },
+  {
+    "package": "@tiptap/extension-strike",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-strike.txt"
+  },
+  {
+    "package": "@tiptap/extension-table",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-table.txt"
+  },
+  {
+    "package": "@tiptap/extension-text",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-text.txt"
+  },
+  {
+    "package": "@tiptap/extension-underline",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-underline.txt"
+  },
+  {
+    "package": "@tiptap/extension-unique-id",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extension-unique-id.txt"
+  },
+  {
+    "package": "@tiptap/extensions",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--extensions.txt"
+  },
+  {
+    "package": "@tiptap/markdown",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--markdown.txt"
+  },
+  {
+    "package": "@tiptap/pm",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--pm.txt"
+  },
+  {
+    "package": "@tiptap/starter-kit",
+    "version": "3.33.0",
+    "license": "MIT",
+    "file": "licenses/editor/tiptap--starter-kit.txt"
+  }
+]
