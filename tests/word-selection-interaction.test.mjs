@@ -117,6 +117,9 @@ test('the native input reacts to a new sentence, preserves authored drafts, and 
   draft='';await render();assert.equal(draft,'','same selection must not refill input after a send or manual clear');
   assert.equal(submitted,0);assert.equal(persisted,2);
   props.conversationOnly=true;await render();props.conversationOnly=false;await render();assert(draft.includes('第三句话。'));assert.equal(persisted,3);assert.equal(submitted,0);
+  const template=renderer.root.findByProps({'aria-label':'修改提示词模板'}),option=template.props.children.find(item=>item.props.value!==template.props.value);
+  const previousDraft=draft;await act(async()=>template.props.onChange({target:{value:option.props.value}}));assert.notEqual(draft,previousDraft);assert(draft.includes('第三句话。'));assert.equal(persisted,4);
+  draft='作者手写要求需要保留。';await render();await act(async()=>renderer.root.findByProps({'aria-label':'修改提示词模板'}).props.onChange({target:{value:'scientific'}}));assert.equal(draft,'作者手写要求需要保留。');assert.equal(submitted,0);
 });
 
 test('opening managed Word bytes leaves a restored File Home page and displays the document',async t=>{

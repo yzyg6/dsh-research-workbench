@@ -9,13 +9,15 @@ import { NativeSentenceWriting } from './native-writing.mjs';
 import { publishFigure } from './figure-publish.mjs';
 import { WordEditing } from './word-edit.mjs';
 import {WordFormatting} from './word-formatting.mjs';
+import {WordLiveControl} from './word-live.mjs';
+import {selectionWithText} from '../shared/word-sentence-update.mjs';
 import { WordPreview } from './word-preview.mjs';
 import { revisionAction, systemFonts, systemFont } from './revision-service.mjs';
 
 export { PREFIX };
 const testMarker = (value) => typeof value === 'string' && /^RW-[AB]-(WRITE|FIGURE|READ)-20261109$/.test(value) ? value : null;
 export const WORDCRAFT_FILES = ['wordcraft-0.17.0-bridge.js','wordcraft-0.17.0.wasm.gz','version.json','NotoSansCJKsc-Regular.woff2'];
-export const ROUTES = ['word', ...WORDCRAFT_FILES.map(name=>'wordcraft/'+name), 'state', 'mutate', 'versions', 'asset', 'app', 'app.js', 'host-status'].map((name) => `${PREFIX}/${name}`);
+export const ROUTES = ['word', 'word-control', ...WORDCRAFT_FILES.map(name=>'wordcraft/'+name), 'state', 'mutate', 'versions', 'asset', 'app', 'app.js', 'host-status'].map((name) => `${PREFIX}/${name}`);
 const response = (value, status = 200) => Response.json(value, { status, headers: { 'cache-control': 'no-store' } });
 
 export function boundProjectContext(store, agentId, { objectId } = {}) {
@@ -37,6 +39,7 @@ export class WorkspaceRuntime {
     this.wordPreview = new WordPreview(this.store);
     this.wordEditing = new WordEditing(this.store);
     this.wordFormatting=new WordFormatting(this);
+    this.wordLive=new WordLiveControl(this);
     this.runner.handlers.set('writing.sentence', (row, signal) => this.writing.run(row, signal));
     this.listeners = new Set();
     this.integrations = { projectTools: 'not-mounted', attachedSessions: 0, sentenceModel: 'not-mounted' };
@@ -58,6 +61,14 @@ export class WorkspaceRuntime {
     }
   }
   onMutation(listener) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
+  waitForChange(stamp,signal,timeout=10000){
+    if(this.stamp()!==stamp)return Promise.resolve({stamp:this.stamp(),watch:true});
+    return new Promise(resolve=>{
+      let complete=false,off=()=>{};
+      const finish=()=>{if(complete)return;complete=true;clearTimeout(timer);off();signal?.removeEventListener('abort',finish);resolve({stamp:this.store.closed?stamp:this.stamp(),watch:true})};
+      const timer=setTimeout(finish,timeout);timer.unref?.();off=this.store.onChange(finish);signal?.addEventListener('abort',finish,{once:true});if(signal?.aborted||this.stamp()!==stamp)finish();
+    });
+  }
   recordDiagnostic(name, value) {
     const operation = this.diagnosticTail.then(async () => {
       const directory = join(this.store.root, 'diagnostics'); await mkdir(directory, { recursive: true });
@@ -72,7 +83,7 @@ export class WorkspaceRuntime {
     switch (action) {
       case 'documentHistory': case 'documentHistoryDetail': case 'reviewReminders':
         return {actionResult:await revisionAction(this,action,data)};
-      case 'restoreDocumentHistory': case 'checkReminder': case 'classifySentence':
+      case 'restoreDocumentHistory': case 'checkReminder': case 'classifySentence': case 'editSentenceSuggestion':
         actionResult=await revisionAction(this,action,data);break;
       case 'systemFonts':return {actionResult:await systemFonts()};
       case 'createProject': await this.store.createProject(data); break;
@@ -106,7 +117,9 @@ export class WorkspaceRuntime {
       case 'prepareWordPreview': return {actionResult:await this.wordPreview.start(data.projectId,data.objectId)};
       case 'prepareWordEdit': {
         const {path}=await this.wordEditing.source(data.projectId,data.objectId);
-        return {actionResult:{...await this.wordEditing.inspect({path,summary:true}),chineseFont:'Noto Sans CJK SC'}};
+        const summary=await this.wordEditing.inspect({path,summary:true});
+        void this.wordEditing.warmHistory(data.projectId,data.objectId).catch(()=>{});
+        return {actionResult:{...summary,chineseFont:'Noto Sans CJK SC'}};
       }
       case 'wordEditorStatus': {
         this.store.object(data.projectId,data.objectId);
@@ -116,8 +129,13 @@ export class WorkspaceRuntime {
       }
       case 'cancelWordPreview': await this.wordPreview.cancel(data); return {actionResult:{cancelled:true}};
       case 'bindSentenceSession': await this.nativeWriting.bind(data); break;
-      case 'applySentence': await (JSON.parse(this.writing.row(data.projectId,data.jobId).input).format==='docx'?this.wordEditing.apply(this.writing,data):this.writing.apply(data)); break;
-      case 'undoSentence': await (JSON.parse(this.writing.row(data.projectId,data.jobId).input).format==='docx'?this.wordEditing.undo(this.writing,data):this.writing.undo(data)); break;
+      case 'applySentence': case 'undoSentence': {
+        const row=this.writing.row(data.projectId,data.jobId),input=JSON.parse(row.input),before=JSON.parse(row.output||'null'),apply=action==='applySentence';
+        if(input.format!=='docx'){await (apply?this.writing.apply(data):this.writing.undo(data));break}
+        await (apply?this.wordEditing.apply(this.writing,data):this.wordEditing.undo(this.writing,data));
+        const output=JSON.parse(this.writing.row(data.projectId,data.jobId).output);
+        actionResult={wordUpdate:{objectId:input.objectId,fromRevision:apply?input.expectedRevision:before.appliedRevision,revision:apply?output.appliedRevision:output.undoneRevision,selection:selectionWithText(input.wordSelection,apply?input.wordSelection.text:before.proposal.replacement),replacement:apply?output.proposal.replacement:input.wordSelection.text}};break;
+      }
       case 'importLiterature': await this.writing.evidence.import(data); break;
       case 'saveTaskState': if (data.task === 'writing' && data.patch?.sentenceJobId) await this.nativeWriting.activate({ projectId: data.projectId, jobId: data.patch.sentenceJobId }); await this.store.saveTaskState(data); break;
       case 'bindSession': await this.store.bindSession(data); break;
@@ -137,6 +155,13 @@ export class WorkspaceRuntime {
       if (request.method === 'POST' && !this.trustedTransport && request.headers.get('origin') && request.headers.get('origin') !== url.origin) return response({ error: '请求来源与本机工作台不一致。' }, 403);
       const name = url.pathname.slice(PREFIX.length + 1);
       if (!url.pathname.startsWith(PREFIX + '/')) return response({ error: '未找到工作台入口。' }, 404);
+      if(name==='word-control'&&request.method==='POST'){
+        if(!request.headers.get('content-type')?.startsWith('application/json'))return response({error:'操作请求必须为 JSON。'},415);
+        const raw=await request.text();if(Buffer.byteLength(raw)>2*1024*1024)return response({error:'Word 回执过大。'},413);
+        let body;try{body=JSON.parse(raw)}catch{return response({error:'Word 请求格式无效。'},400)}
+        if(!body?.data||typeof body.data!=='object'||!['poll','ack'].includes(body.action))return response({error:'Word 操作无效。'},400);
+        return response(body.action==='poll'?this.wordLive.poll(body.data):this.wordLive.acknowledge(body.data));
+      }
       if (name.startsWith('wordcraft/') && request.method === 'GET') {
         const file=name.slice(10);if(!WORDCRAFT_FILES.includes(file))return response({error:'未找到编辑器资源。'},404);
         return new Response(await readFile(join(this.publicRoot,'wordcraft',file)),{headers:{'content-type':file.endsWith('.wasm')?'application/wasm':file.endsWith('.js')?'text/javascript; charset=utf-8':file.endsWith('.json')?'application/json':file.endsWith('.woff2')?'font/woff2':'application/octet-stream','cache-control':file==='version.json'?'no-store':'public, max-age=31536000, immutable','x-content-type-options':'nosniff'}});
@@ -152,6 +177,7 @@ export class WorkspaceRuntime {
       }
       if (name === 'app' && request.method === 'GET') return new Response(await readFile(join(this.publicRoot, 'index.html')), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
       if (name === 'app.js' && request.method === 'GET') return new Response(await readFile(join(this.publicRoot, 'app.js')), { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } });
+      if(name==='state'&&request.method==='GET'&&url.searchParams.get('watch')==='1')return response(await this.waitForChange(url.searchParams.get('stamp'),request.signal));
       if (name === 'state' && request.method === 'GET') return response(url.searchParams.get('word') === '1' ? await this.wordPreview.status(url.searchParams.get('projectId'),url.searchParams.get('objectId')) : url.searchParams.get('tree') === '1' ? await this.store.workspaceFiles.list(url.searchParams.get('projectId'), url.searchParams.get('directory') || '', { offset: Number(url.searchParams.get('offset') || 0) }) : url.searchParams.get('stamp') === '1' ? { stamp: this.stamp() } : await this.viewState());
       if (name === 'host-status' && request.method === 'POST') {
         const raw = await request.text(); if (raw.length > 32000) return response({ error: '状态记录过长。' }, 413);
@@ -165,7 +191,7 @@ export class WorkspaceRuntime {
           const probe = item.nativeEvidence || {};
           return { projectId: binding.project_id, task: binding.task, ...(native ? { jobId: native.id } : {}), sessionId: item.sessionId, mounted: item.mounted === true, status: item.status === 'ready' ? 'ready' : 'unavailable', nativeEvidence: { slotMatchesBinding: probe.slotSessionId === item.sessionId, workspaceMember: probe.workspaceMember === true, inputPhase: ['plain', 'claimed', 'submitting', 'released'].includes(probe.inputPhase) ? probe.inputPhase : null, seededThisMount: probe.seededThisMount === true, fixtureMode: ['seed', 'restore'].includes(probe.fixtureMode) ? probe.fixtureMode : null, draftMarker: testMarker(probe.draftMarker), storedDraftMarker: testMarker(probe.storedDraftMarker) }, nextModel: next ? { provider: String(next.provider || '').slice(0, 100), model: String(next.model || '').slice(0, 150), reasoningEffort: String(next.reasoningEffort || '').slice(0, 40) } : null };
         });
-        await this.recordDiagnostic('desktop-client-latest', { version: body.version, origin: String(body.origin || '').slice(0, 300), userAgent: String(body.userAgent || '').slice(0, 700), sessions, integrations: { ...this.integrations } });
+        await this.recordDiagnostic('desktop-client-latest', { version: body.version, uiVersion:typeof body.uiVersion==='string'?body.uiVersion.slice(0,40):null, origin: String(body.origin || '').slice(0, 300), userAgent: String(body.userAgent || '').slice(0, 700), sessions, integrations: { ...this.integrations } });
         return response({ saved: true });
       }
       if (name === 'versions' && request.method === 'GET') return response(this.store.versions(url.searchParams.get('projectId'), url.searchParams.get('objectId')));
@@ -190,5 +216,5 @@ export class WorkspaceRuntime {
       return response({ error: '本机资料操作未完成，原记录与输入应保留。', code: 'WORKSPACE_IO_ERROR' }, 500);
     }
   }
-  async dispose() { this.disposeNativeConversationVisibility?.();this.listeners.clear(); await this.wordPreview.dispose(); await this.wordEditing.tail; await this.runner.stop(); await this.diagnosticTail; await this.store.close(); }
+  async dispose() { this.wordLive.dispose();this.disposeNativeConversationVisibility?.();this.listeners.clear(); await this.wordPreview.dispose(); await this.wordEditing.tail; await this.runner.stop(); await this.diagnosticTail; await this.store.close(); }
 }

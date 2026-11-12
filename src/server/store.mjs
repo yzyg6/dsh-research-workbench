@@ -67,9 +67,11 @@ export class ProjectStore {
     this.fileRollbacks = null;
     this.tail = Promise.resolve();
     this.closed = false;
+    this.changeListeners=new Set();
   }
+  onChange(listener){this.changeListeners.add(listener);return()=>this.changeListeners.delete(listener)}
   write(operation) {
-    const next = this.tail.then(async () => { assert(!this.closed, 'CLOSED', '项目资料服务已关闭。', 503); const before=this.db.prepare('SELECT total_changes() value').get().value;const result = await operation(); if(this.db.prepare('SELECT total_changes() value').get().value!==before||this.workspaceFiles.errors.size)await this.workspaceFiles.checkpointAll(); return result; });
+    const next = this.tail.then(async () => { assert(!this.closed, 'CLOSED', '项目资料服务已关闭。', 503); const before=this.db.prepare('SELECT total_changes() value').get().value;const result = await operation(); const changed=this.db.prepare('SELECT total_changes() value').get().value!==before;if(changed||this.workspaceFiles.errors.size)await this.workspaceFiles.checkpointAll();if(changed)for(const listener of this.changeListeners){try{listener()}catch{}} return result; });
     this.tail = next.catch(() => {});
     return next;
   }
@@ -435,5 +437,5 @@ export class ProjectStore {
       return this.write(() => this.db.prepare("UPDATE jobs SET status='failed',phase='文件检查未完成',error=?,updated_at=? WHERE id=? AND status='running'").run(error instanceof StoreError ? error.message : '文件读取或写入失败，原资料仍保留。', now(), row.id));
     }
   }
-  async close() { await this.tail; this.closed = true; this.db.close(); }
+  async close() { await this.tail;await this.wordWorker?.close(); this.closed = true;for(const listener of this.changeListeners)listener();this.changeListeners.clear();this.db.close(); }
 }

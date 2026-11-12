@@ -30,9 +30,14 @@ Thumbs.db
 /probes/word-edit/*
 !/probes/word-edit/create-rich-fixture.py
 !/probes/word-edit/create-format-fixture.py
+!/probes/word-edit/live-browser.mjs
+!/probes/word-edit/workflow-perf.mjs
 !/probes/word-opening/
 /probes/word-opening/*
 !/probes/word-opening/create-fixture.py
 !/probes/word-flow/
 /probes/word-flow/*
 !/probes/word-flow/harness.mjs
+!/probes/revision-save/
+/probes/revision-save/*
+!/probes/revision-save/install-save.mjs

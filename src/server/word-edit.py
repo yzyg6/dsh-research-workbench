@@ -8,6 +8,9 @@ import re
 import sys
 import os
 import zipfile
+import io
+import base64
+from contextlib import redirect_stdout
 from pathlib import Path
 import xml.etree.ElementTree as ET
 from xml.parsers import expat
@@ -157,8 +160,8 @@ def patch(raw, root, nodes, start, end, replacement):
     return raw
 
 
-def main():
-    args = json.load(sys.stdin)
+def main(args=None):
+    args = json.load(sys.stdin) if args is None else args
     if os.name == 'nt':
         for key in ('path', 'output', 'undo'):
             if args.get(key) and not args[key].startswith('\\\\?\\'):
@@ -197,7 +200,49 @@ def main():
         z.close()
 
 
-if __name__ == '__main__':
+def history_text(data):
+    if len(data) > 32 * 1024 * 1024:
+        raise ValueError('DOCX too large')
+    lines = []
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        names = [name for name in archive.namelist() if name == 'word/document.xml' or
+                 (name.startswith(('word/footnotes', 'word/endnotes', 'word/header', 'word/footer')) and name.endswith('.xml'))]
+        if sum(archive.getinfo(name).file_size for name in names) > 32 * 1024 * 1024:
+            raise ValueError('OOXML too large')
+        for name in names:
+            raw = archive.read(name)
+            if b'<!DOCTYPE' in raw.upper() or b'<!ENTITY' in raw.upper():
+                raise ValueError('不支持含实体声明的 Word。')
+            root = ET.fromstring(raw)
+            if name != 'word/document.xml':
+                lines.append('\n[' + name + ']')
+            for paragraph in root.iter(q('p')):
+                lines.append(''.join(node.text or '' for node in paragraph.iter() if node.tag.endswith('}t')))
+    return '\n'.join(lines) + '\n'
+
+
+def worker():
+    for line in sys.stdin:
+        request = {}
+        try:
+            request = json.loads(line)
+            args = request['args']
+            if 'historyBase64' in args:
+                result = {'text': history_text(base64.b64decode(args['historyBase64'], validate=True))}
+            else:
+                buffer = io.StringIO()
+                with redirect_stdout(buffer):
+                    main(args)
+                result = json.loads(buffer.getvalue())
+            response = {'id': request['id'], 'result': result}
+        except Exception as error:
+            response = {'id': request.get('id'), 'error': str(error)}
+        print(json.dumps(response, ensure_ascii=False), flush=True)
+
+
+if __name__ == '__main__' and '--worker' in sys.argv:
+    worker()
+elif __name__ == '__main__':
     try:
         main()
     except (ValueError, KeyError, IndexError, ET.ParseError, zipfile.BadZipFile, expat.ExpatError) as error:

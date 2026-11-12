@@ -2,16 +2,6 @@
    Keep the document canvas and native session mounted through presentation changes. */
 .rw-app .rw-document-role{display:inline-flex;align-items:center;flex-shrink:0;padding:2px 7px;border-radius:6px;background:#f1f3f6;color:#69788d;font-size:11px;line-height:1.6;font-weight:400;white-space:nowrap}
 .rw-app .rw-document-role[data-role=workspace]{background:#eaf1fb;color:#174994}
-.rw-app .rw-word-format-panel{display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto;background:var(--rw-paper)}
-.rw-app .rw-format-controls,.rw-app .rw-format-preview{padding:12px 14px;border-bottom:1px solid var(--rw-line);font-size:12px;color:var(--rw-muted)}
-.rw-app .rw-format-controls>p{margin:0 0 10px;line-height:1.7}
-.rw-app .rw-format-fields{display:grid;grid-template-columns:minmax(100px,1.3fr) minmax(70px,1fr) 60px;gap:8px}
-.rw-app .rw-format-fields label{display:flex;flex-direction:column;gap:5px;font-size:11px;min-width:0}
-.rw-app .rw-format-fields :is(input,select){box-sizing:border-box;min-width:0;width:100%;padding:7px;border:1px solid var(--rw-line);border-radius:8px;background:var(--rw-paper);color:var(--rw-ink);font:inherit}
-.rw-app .rw-format-buttons{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
-.rw-app .rw-format-preview{max-height:230px;overflow:auto;background:#f8faff;color:var(--rw-ink)}
-.rw-app .rw-format-sample{border-top:1px solid var(--rw-line);padding:5px 0;font-size:11px;line-height:1.7}
-.rw-app .rw-format-conversation{flex:1;min-height:260px;display:flex;flex-direction:column}
 .rw-app .rw-workspace-file>.rw-document-role{margin-left:auto}
 .rw-app .rw-word-conversation-document{display:flex;align-items:center;gap:8px;min-width:0;padding:7px 13px;border-bottom:1px solid var(--rw-line);color:var(--rw-muted);font-size:11px;background:var(--rw-paper)}
 .rw-app .rw-word-conversation-document>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
@@ -83,7 +73,8 @@
 /* One quiet phrase in the header; only the text changes at the chosen interval. */
 .rw-app .rw-motto{display:flex;align-items:center;flex:0 1 auto;min-width:0;max-width:340px;margin-inline:auto;padding:4px 8px;color:var(--rw-accent);cursor:default;border-radius:7px}
 .rw-app .rw-motto:focus-visible{outline:2px solid var(--rw-accent);outline-offset:2px}
-.rw-app .rw-motto-line{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--rw-accent);font-size:12px;line-height:1.7;letter-spacing:.025em;animation:rw-overlay-in 220ms ease-out both}
+.rw-app .rw-motto-line{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--rw-accent);font-size:18px;line-height:1.5;letter-spacing:.025em;animation:rw-overlay-in 220ms ease-out both}
+.rw-app .rw-motto-font-preview{padding:12px 14px;margin:10px 0 18px;border:1px solid var(--rw-line);border-radius:12px;background:var(--rw-soft);color:var(--rw-accent);font-size:22px;line-height:1.65;overflow-wrap:anywhere}
 .rw-app .rw-motto-editor{max-width:620px}
 .rw-app .rw-motto-editor .rw-motto-enabled{flex-direction:row;align-items:center;gap:9px;margin-bottom:18px}
 .rw-app .rw-motto-enabled input{width:15px;height:15px;padding:0}
@@ -209,11 +200,15 @@
 .rw-app .rw-git-tree li:before{background:var(--rw-accent);border-color:var(--rw-paper)}
 .rw-app .rw-history-restore{background:var(--rw-paper);border-color:var(--rw-line)}
 .rw-app .rw-related-reminders article{border-color:var(--rw-line);border-radius:14px}
-/* Sentence pairs stay side by side. Colour is a small cue, not a full-card fill. */
+/* Full sentence backgrounds carry the revision level; word marks show exact changes. */
 .rw-app .rw-change-head{gap:24px;padding:8px 17px 10px;font:500 11px/1.6 var(--rw-ui);color:var(--rw-muted)}
 .rw-app .rw-change-head b{font-weight:500}
 .rw-app .rw-change-head b+b{padding-left:20px}
-.rw-app .rw-change-row{border:1px solid var(--rw-line);border-radius:14px;background:var(--rw-paper);margin:0 0 14px;padding:14px 16px 12px;box-shadow:0 2px 5px #16376403}
+.rw-app [data-kind=unchanged]{--change-ink:#23673b;--change-bg:#e0f2e5;--change-mark:#bde2c7}
+.rw-app [data-kind=wording]{--change-ink:#164d88;--change-bg:#dcecff;--change-mark:#aacff5}
+.rw-app [data-kind=structure]{--change-ink:#854300;--change-bg:#ffebc9;--change-mark:#f6cd8c}
+.rw-app [data-kind=meaning]{--change-ink:#9b2637;--change-bg:#fbdfe4;--change-mark:#f3b6c2}
+.rw-app .rw-change-row{border:1px solid color-mix(in srgb,var(--change-ink) 25%,white);border-left:4px solid var(--change-ink);border-radius:14px;background:var(--change-bg);margin:0 0 14px;padding:14px 16px 12px;box-shadow:0 2px 5px #16376403}
 .rw-app .rw-change-meta{gap:12px;min-height:28px;margin-bottom:12px;font:11px/1.6 var(--rw-ui);color:var(--rw-muted)}
 .rw-app .rw-change-meta>span{display:inline-flex;align-items:center;gap:7px;min-width:0}
 .rw-app .rw-change-meta>span:before{content:'';width:5px;height:5px;flex:none;border-radius:50%;background:var(--change-ink)}
@@ -221,8 +216,12 @@
 .rw-app .rw-change-meta select:focus-visible{outline:2px solid var(--rw-accent);outline-offset:2px}
 .rw-app .rw-change-pair{gap:24px;align-items:stretch}
 .rw-app .rw-change-pair p{margin:0;color:var(--rw-ink);font-size:15px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere}
-.rw-app .rw-change-pair p+p{padding-left:20px;border-left:1px solid #edf1f6}
-.rw-app .rw-change-pair .rw-word-change{color:#174994;background:#e8f0fc;border-radius:3px;padding:0;font-weight:500;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.rw-app .rw-change-pair .rw-change-after{padding-left:20px;border-left:1px solid #27364b25;min-width:0}
+.rw-app .rw-change-pair .rw-word-change{color:var(--change-ink);background:var(--change-mark);border-radius:3px;padding:0;font-weight:600;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.rw-app .rw-change-after textarea{box-sizing:border-box;display:block;width:100%;min-height:90px;resize:vertical;padding:8px;border:1px solid var(--change-ink);border-radius:8px;background:#ffffffb8;color:var(--rw-ink);font:15px/1.9 var(--rw-ui);white-space:pre-wrap}
+.rw-app .rw-suggestion-edit-button{margin-top:8px;padding:3px 8px;border:1px solid #27364b30;border-radius:6px;background:#ffffff80;color:var(--change-ink);font:11px/1.7 var(--rw-ui);cursor:pointer}
+.rw-app .rw-suggestion-edit-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.rw-app .rw-word-update-status{position:absolute;top:12px;right:16px;z-index:3;padding:6px 12px;border:1px solid #b9d0ed;border-radius:9px;background:#f4f8ffed;color:#174994;font:12px/1.7 var(--rw-ui);pointer-events:none}
 .rw-app .rw-change-row>small{display:block;margin-top:14px;padding-top:9px;border-top:1px solid #f0f3f7;color:var(--rw-muted);font:11px/1.7 var(--rw-ui)}
 
 /* Low-frequency surfaces get a short composited entrance; no layout tweening. */

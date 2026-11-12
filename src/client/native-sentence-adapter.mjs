@@ -33,6 +33,7 @@ export class NativeSentenceAdapter {
     if (!conversation || this.closed) return null;
     let record = this.records.get(job.id);
     if (!verify&&record?.status === 'ready' && record.sessionId === conversation.sessionId) return record;
+    if(!verify&&job.nativeSessionId===conversation.sessionId&&job.objectId===conversation.objectId&&project.id===conversation.projectId)this.bindings.set(job.id,conversation.sessionId);
     try {
       if(verify||this.bindings.get(job.id)!==conversation.sessionId)await this.bind(project,job,conversation.sessionId,onBinding,{refresh:verify});
       if (this.closed || this.sessions !== service) return null;

@@ -36,10 +36,10 @@ __export(entry_exports, {
   inject: () => inject
 });
 module.exports = __toCommonJS(entry_exports);
-var import_react13 = __toESM(require("react"), 1);
+var import_react12 = __toESM(require("react"), 1);
 
 // src/client/App.jsx
-var import_react12 = __toESM(require("react"), 1);
+var import_react11 = __toESM(require("react"), 1);
 
 // src/client/ActionMenu.jsx
 var import_react2 = __toESM(require("react"), 1);
@@ -146,6 +146,20 @@ var import_react4 = __toESM(require("react"), 1);
 
 // src/client/motto-preferences.mjs
 var KEY = "dsh-research-workbench:mottos:v1";
+var DEFAULT_MOTTO_FONT = "\u6BDB\u4F53";
+var MAO_FONT_FAMILY = "\u8349\u6A80\u658B\u6BDB\u6CFD\u4E1C\u5B57\u4F53";
+var MOTTO_FONTS = Object.freeze(["\u6BDB\u4F53", MAO_FONT_FAMILY, "\u7CFB\u7EDF\u5B57\u4F53", "\u5B8B\u4F53", "\u6977\u4F53", "\u534E\u6587\u884C\u6977", "\u5FAE\u8F6F\u96C5\u9ED1", "Microsoft YaHei UI", "Segoe UI"]);
+function mottoFont(value) {
+  const name = value ?? DEFAULT_MOTTO_FONT;
+  if (typeof name !== "string" || !name.trim() || name.length > 100 || /[\x00-\x1f\x7f]/.test(name)) throw Error("\u8BF7\u586B\u5199\u4E0D\u8D85\u8FC7 100 \u5B57\u7684\u672C\u673A\u5B57\u4F53\u540D\u79F0\u3002");
+  return name.trim();
+}
+function mottoFontFamily(value) {
+  const name = mottoFont(value), fallback = "var(--rw-ui,system-ui),sans-serif";
+  if (name === "\u7CFB\u7EDF\u5B57\u4F53") return fallback;
+  const families = name === DEFAULT_MOTTO_FONT ? [MAO_FONT_FAMILY, "\u6BDB\u4F53", "\u6BDB\u6CFD\u4E1C\u5B57\u4F53", "\u6BDB\u6CFD\u4E1C\u4E66\u6CD5\u5B57\u4F53", "\u6BDB\u6CFD\u4E1C\u4E66\u6CD5\u4F53", "\u65B9\u6B63\u6BDB\u4F53\u7B80\u4F53", "FZMaoTi-G02S", "MaoTi", "Mao Ti"] : [name];
+  return families.map((name2) => JSON.stringify(name2)).join(",") + "," + fallback;
+}
 var DEFAULT_MOTTOS = Object.freeze([
   "\u4E16\u4E0A\u65E0\u96BE\u4E8B\uFF0C\u53EA\u8981\u80AF\u767B\u6500\u3002\u2014\u2014\u6BDB\u6CFD\u4E1C\u300A\u6C34\u8C03\u6B4C\u5934\xB7\u91CD\u4E0A\u4E95\u5188\u5C71\u300B",
   "\u96C4\u5173\u6F2B\u9053\u771F\u5982\u94C1\uFF0C\u800C\u4ECA\u8FC8\u6B65\u4ECE\u5934\u8D8A\u3002\u2014\u2014\u6BDB\u6CFD\u4E1C\u300A\u5FC6\u79E6\u5A25\xB7\u5A04\u5C71\u5173\u300B",
@@ -177,14 +191,20 @@ function mottoDisplayText(line) {
   return line.replace(/——[^—]+《[^》]+》$/u, "").trim();
 }
 function defaultMottoPreferences() {
-  return { enabled: true, paused: false, intervalSeconds: 30, items: [...DEFAULT_MOTTOS] };
+  return { enabled: true, paused: false, intervalSeconds: 30, fontFamily: DEFAULT_MOTTO_FONT, items: [...DEFAULT_MOTTOS] };
 }
 function readMottoPreferences(storage) {
   try {
     const value = JSON.parse((storage ?? globalThis.localStorage)?.getItem(KEY) || "null");
     if (!value || !Array.isArray(value.items) || value.items.some((item) => typeof item !== "string")) return defaultMottoPreferences();
     const items = parseMottoLines(value.items.join("\n"));
-    return { enabled: value.enabled !== false, paused: value.paused === true, intervalSeconds: mottoInterval(value.intervalSeconds ?? 30), items };
+    let fontFamily;
+    try {
+      fontFamily = mottoFont(value.fontFamily);
+    } catch {
+      fontFamily = DEFAULT_MOTTO_FONT;
+    }
+    return { enabled: value.enabled !== false, paused: value.paused === true, intervalSeconds: mottoInterval(value.intervalSeconds ?? 30), fontFamily, items };
   } catch {
     return defaultMottoPreferences();
   }
@@ -194,7 +214,7 @@ function writeMottoPreferences(value, storage) {
     const target = storage ?? globalThis.localStorage;
     if (!target) return false;
     const items = parseMottoLines(value.items.join("\n"));
-    target.setItem(KEY, JSON.stringify({ enabled: Boolean(value.enabled), paused: Boolean(value.paused), intervalSeconds: mottoInterval(value.intervalSeconds ?? 30), items }));
+    target.setItem(KEY, JSON.stringify({ enabled: Boolean(value.enabled), paused: Boolean(value.paused), intervalSeconds: mottoInterval(value.intervalSeconds ?? 30), fontFamily: mottoFont(value.fontFamily), items }));
     return true;
   } catch {
     return false;
@@ -207,6 +227,8 @@ function MottoEditor({ preferences, onSave, onClose }) {
   const [text2, setText] = import_react4.default.useState(() => preferences.items.join("\n")), [enabled, setEnabled] = import_react4.default.useState(preferences.enabled), [error, setError] = import_react4.default.useState("");
   const [intervalSeconds, setIntervalSeconds] = import_react4.default.useState(preferences.intervalSeconds);
   const [paused, setPaused] = import_react4.default.useState(preferences.paused);
+  const [fontFamily, setFontFamily] = import_react4.default.useState(preferences.fontFamily || DEFAULT_MOTTO_FONT);
+  const fontOptions = import_react4.default.useId();
   import_react4.default.useEffect(() => {
     const node = dialog.current;
     node.showModal();
@@ -216,12 +238,18 @@ function MottoEditor({ preferences, onSave, onClose }) {
     try {
       const items = parseMottoLines(text2);
       if (enabled && !items.length) throw Error("\u8BF7\u81F3\u5C11\u586B\u5199\u4E00\u53E5\u6807\u8BED\uFF0C\u6216\u5173\u95ED\u9876\u90E8\u663E\u793A\u3002");
-      if (!onSave({ ...preferences, enabled, paused, items, intervalSeconds: mottoInterval(intervalSeconds) })) throw Error("\u6D4F\u89C8\u5668\u672A\u80FD\u4FDD\u5B58\u6807\u8BED\uFF0C\u8BF7\u4FDD\u7559\u5185\u5BB9\u540E\u91CD\u8BD5\u3002");
+      if (!onSave({ ...preferences, enabled, paused, items, fontFamily: mottoFont(fontFamily), intervalSeconds: mottoInterval(intervalSeconds) })) throw Error("\u6D4F\u89C8\u5668\u672A\u80FD\u4FDD\u5B58\u6807\u8BED\uFF0C\u8BF7\u4FDD\u7559\u5185\u5BB9\u540E\u91CD\u8BD5\u3002");
       onClose();
     } catch (e) {
       setError(e.message);
     }
   };
+  let previewFamily;
+  try {
+    previewFamily = mottoFontFamily(fontFamily);
+  } catch {
+    previewFamily = mottoFontFamily(DEFAULT_MOTTO_FONT);
+  }
   return /* @__PURE__ */ import_react4.default.createElement("dialog", { ref: dialog, className: "rw-modal rw-motto-editor", "aria-label": "\u52B1\u5FD7\u6807\u8BED\u8BBE\u7F6E", onCancel: (event) => {
     event.preventDefault();
     onClose();
@@ -234,7 +262,10 @@ function MottoEditor({ preferences, onSave, onClose }) {
   } }, /* @__PURE__ */ import_react4.default.createElement("div", { className: "rw-modal-head" }, /* @__PURE__ */ import_react4.default.createElement("h2", null, "\u52B1\u5FD7\u6807\u8BED"), /* @__PURE__ */ import_react4.default.createElement("button", { className: "rw-icon-button", "aria-label": "\u5173\u95ED\u6807\u8BED\u8BBE\u7F6E", onClick: onClose }, /* @__PURE__ */ import_react4.default.createElement(Icon, { name: "close" }))), /* @__PURE__ */ import_react4.default.createElement("div", { className: "rw-modal-body" }, /* @__PURE__ */ import_react4.default.createElement("label", { className: "rw-motto-enabled" }, /* @__PURE__ */ import_react4.default.createElement("input", { type: "checkbox", checked: enabled, onChange: (event) => setEnabled(event.target.checked) }), "\u5728\u9876\u90E8\u663E\u793A\u6807\u8BED"), /* @__PURE__ */ import_react4.default.createElement("label", { className: "rw-motto-enabled" }, /* @__PURE__ */ import_react4.default.createElement("input", { type: "checkbox", "aria-label": "\u6682\u505C\u81EA\u52A8\u5207\u6362", checked: paused, onChange: (event) => setPaused(event.target.checked) }), "\u6682\u505C\u81EA\u52A8\u5207\u6362"), /* @__PURE__ */ import_react4.default.createElement("label", { className: "rw-motto-interval" }, "\u5207\u6362\u95F4\u9694", /* @__PURE__ */ import_react4.default.createElement("span", null, "\u6BCF ", /* @__PURE__ */ import_react4.default.createElement("input", { "aria-label": "\u6807\u8BED\u5207\u6362\u95F4\u9694\uFF08\u79D2\uFF09", type: "number", min: "5", max: "3600", step: "1", value: intervalSeconds, onChange: (event) => {
     setIntervalSeconds(event.target.value);
     setError("");
-  } }), " \u79D2\u6362\u4E00\u53E5")), /* @__PURE__ */ import_react4.default.createElement("label", null, "\u6BCF\u884C\u4E00\u53E5", /* @__PURE__ */ import_react4.default.createElement("textarea", { autoFocus: true, "aria-label": "\u6807\u8BED\u5185\u5BB9\uFF0C\u6BCF\u884C\u4E00\u53E5", value: text2, maxLength: 6e3, onChange: (event) => {
+  } }), " \u79D2\u6362\u4E00\u53E5")), /* @__PURE__ */ import_react4.default.createElement("label", null, "\u6807\u8BED\u5B57\u4F53", /* @__PURE__ */ import_react4.default.createElement("input", { "aria-label": "\u6807\u8BED\u5B57\u4F53", list: fontOptions, value: fontFamily, maxLength: 100, onChange: (event) => {
+    setFontFamily(event.target.value);
+    setError("");
+  } }), /* @__PURE__ */ import_react4.default.createElement("datalist", { id: fontOptions }, MOTTO_FONTS.map((font) => /* @__PURE__ */ import_react4.default.createElement("option", { key: font, value: font })))), /* @__PURE__ */ import_react4.default.createElement("p", { className: "rw-context-muted" }, "\u9ED8\u8BA4\u6BDB\u4F53\uFF1B\u4E5F\u53EF\u76F4\u63A5\u8F93\u5165\u672C\u673A\u5DF2\u5B89\u88C5\u5B57\u4F53\u7684\u5B8C\u6574\u540D\u79F0\u3002\u5B57\u4F53\u672A\u5B89\u88C5\u65F6\u4F7F\u7528\u7CFB\u7EDF\u5B57\u4F53\u3002"), /* @__PURE__ */ import_react4.default.createElement("div", { className: "rw-motto-font-preview", "aria-label": "\u6807\u8BED\u5B57\u4F53\u9884\u89C8", style: { fontFamily: previewFamily } }, mottoDisplayText(text2.split(/\r?\n/).find((line) => line.trim()) || DEFAULT_MOTTOS[0])), /* @__PURE__ */ import_react4.default.createElement("label", null, "\u6BCF\u884C\u4E00\u53E5", /* @__PURE__ */ import_react4.default.createElement("textarea", { autoFocus: true, "aria-label": "\u6807\u8BED\u5185\u5BB9\uFF0C\u6BCF\u884C\u4E00\u53E5", value: text2, maxLength: 6e3, onChange: (event) => {
     setText(event.target.value);
     setError("");
   }, spellCheck: false })), /* @__PURE__ */ import_react4.default.createElement("p", { className: "rw-context-muted" }, "\u6700\u591A 30 \u53E5\uFF0C\u6BCF\u53E5 180 \u5B57\u3002\u9F20\u6807\u79FB\u5165\u65F6\u4FDD\u7559\u5F53\u524D\u8BED\u53E5\uFF1B\u5207\u6362\u95F4\u9694\u53EF\u8BBE\u4E3A 5 \u81F3 3600 \u79D2\u3002"), error && /* @__PURE__ */ import_react4.default.createElement("p", { className: "rw-error-text", role: "alert" }, error)), /* @__PURE__ */ import_react4.default.createElement("div", { className: "rw-modal-footer" }, /* @__PURE__ */ import_react4.default.createElement("button", { className: "rw-quiet rw-motto-reset", onClick: () => {
@@ -284,7 +315,7 @@ var MottoTicker = import_react4.default.memo(function MottoTicker2({ settingsOpe
     if (event.pointerType !== "touch") setHovered(true);
   }, onPointerLeave: () => setHovered(false), onFocusCapture: () => setFocused(true), onBlurCapture: (event) => {
     if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
-  } }, /* @__PURE__ */ import_react4.default.createElement("span", { className: "rw-motto-line", key: line }, mottoDisplayText(line))), settingsOpen && /* @__PURE__ */ import_react4.default.createElement(MottoEditor, { preferences, onSave: save, onClose: () => onSettingsChange(false) }));
+  } }, /* @__PURE__ */ import_react4.default.createElement("span", { className: "rw-motto-line", key: line, style: { fontFamily: mottoFontFamily(preferences.fontFamily) } }, mottoDisplayText(line))), settingsOpen && /* @__PURE__ */ import_react4.default.createElement(MottoEditor, { preferences, onSave: save, onClose: () => onSettingsChange(false) }));
 });
 
 // src/client/workbench-preferences.mjs
@@ -452,16 +483,6 @@ var refined_workbench_default = `/* CAS blue (#174994 sampled from the supplied 
    Keep the document canvas and native session mounted through presentation changes. */\r
 .rw-app .rw-document-role{display:inline-flex;align-items:center;flex-shrink:0;padding:2px 7px;border-radius:6px;background:#f1f3f6;color:#69788d;font-size:11px;line-height:1.6;font-weight:400;white-space:nowrap}\r
 .rw-app .rw-document-role[data-role=workspace]{background:#eaf1fb;color:#174994}\r
-.rw-app .rw-word-format-panel{display:flex;flex-direction:column;flex:1;min-height:0;overflow:auto;background:var(--rw-paper)}\r
-.rw-app .rw-format-controls,.rw-app .rw-format-preview{padding:12px 14px;border-bottom:1px solid var(--rw-line);font-size:12px;color:var(--rw-muted)}\r
-.rw-app .rw-format-controls>p{margin:0 0 10px;line-height:1.7}\r
-.rw-app .rw-format-fields{display:grid;grid-template-columns:minmax(100px,1.3fr) minmax(70px,1fr) 60px;gap:8px}\r
-.rw-app .rw-format-fields label{display:flex;flex-direction:column;gap:5px;font-size:11px;min-width:0}\r
-.rw-app .rw-format-fields :is(input,select){box-sizing:border-box;min-width:0;width:100%;padding:7px;border:1px solid var(--rw-line);border-radius:8px;background:var(--rw-paper);color:var(--rw-ink);font:inherit}\r
-.rw-app .rw-format-buttons{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}\r
-.rw-app .rw-format-preview{max-height:230px;overflow:auto;background:#f8faff;color:var(--rw-ink)}\r
-.rw-app .rw-format-sample{border-top:1px solid var(--rw-line);padding:5px 0;font-size:11px;line-height:1.7}\r
-.rw-app .rw-format-conversation{flex:1;min-height:260px;display:flex;flex-direction:column}\r
 .rw-app .rw-workspace-file>.rw-document-role{margin-left:auto}\r
 .rw-app .rw-word-conversation-document{display:flex;align-items:center;gap:8px;min-width:0;padding:7px 13px;border-bottom:1px solid var(--rw-line);color:var(--rw-muted);font-size:11px;background:var(--rw-paper)}\r
 .rw-app .rw-word-conversation-document>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}\r
@@ -533,7 +554,8 @@ var refined_workbench_default = `/* CAS blue (#174994 sampled from the supplied 
 /* One quiet phrase in the header; only the text changes at the chosen interval. */\r
 .rw-app .rw-motto{display:flex;align-items:center;flex:0 1 auto;min-width:0;max-width:340px;margin-inline:auto;padding:4px 8px;color:var(--rw-accent);cursor:default;border-radius:7px}\r
 .rw-app .rw-motto:focus-visible{outline:2px solid var(--rw-accent);outline-offset:2px}\r
-.rw-app .rw-motto-line{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--rw-accent);font-size:12px;line-height:1.7;letter-spacing:.025em;animation:rw-overlay-in 220ms ease-out both}\r
+.rw-app .rw-motto-line{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;color:var(--rw-accent);font-size:18px;line-height:1.5;letter-spacing:.025em;animation:rw-overlay-in 220ms ease-out both}\r
+.rw-app .rw-motto-font-preview{padding:12px 14px;margin:10px 0 18px;border:1px solid var(--rw-line);border-radius:12px;background:var(--rw-soft);color:var(--rw-accent);font-size:22px;line-height:1.65;overflow-wrap:anywhere}\r
 .rw-app .rw-motto-editor{max-width:620px}\r
 .rw-app .rw-motto-editor .rw-motto-enabled{flex-direction:row;align-items:center;gap:9px;margin-bottom:18px}\r
 .rw-app .rw-motto-enabled input{width:15px;height:15px;padding:0}\r
@@ -659,11 +681,15 @@ var refined_workbench_default = `/* CAS blue (#174994 sampled from the supplied 
 .rw-app .rw-git-tree li:before{background:var(--rw-accent);border-color:var(--rw-paper)}\r
 .rw-app .rw-history-restore{background:var(--rw-paper);border-color:var(--rw-line)}\r
 .rw-app .rw-related-reminders article{border-color:var(--rw-line);border-radius:14px}\r
-/* Sentence pairs stay side by side. Colour is a small cue, not a full-card fill. */\r
+/* Full sentence backgrounds carry the revision level; word marks show exact changes. */\r
 .rw-app .rw-change-head{gap:24px;padding:8px 17px 10px;font:500 11px/1.6 var(--rw-ui);color:var(--rw-muted)}\r
 .rw-app .rw-change-head b{font-weight:500}\r
 .rw-app .rw-change-head b+b{padding-left:20px}\r
-.rw-app .rw-change-row{border:1px solid var(--rw-line);border-radius:14px;background:var(--rw-paper);margin:0 0 14px;padding:14px 16px 12px;box-shadow:0 2px 5px #16376403}\r
+.rw-app [data-kind=unchanged]{--change-ink:#23673b;--change-bg:#e0f2e5;--change-mark:#bde2c7}\r
+.rw-app [data-kind=wording]{--change-ink:#164d88;--change-bg:#dcecff;--change-mark:#aacff5}\r
+.rw-app [data-kind=structure]{--change-ink:#854300;--change-bg:#ffebc9;--change-mark:#f6cd8c}\r
+.rw-app [data-kind=meaning]{--change-ink:#9b2637;--change-bg:#fbdfe4;--change-mark:#f3b6c2}\r
+.rw-app .rw-change-row{border:1px solid color-mix(in srgb,var(--change-ink) 25%,white);border-left:4px solid var(--change-ink);border-radius:14px;background:var(--change-bg);margin:0 0 14px;padding:14px 16px 12px;box-shadow:0 2px 5px #16376403}\r
 .rw-app .rw-change-meta{gap:12px;min-height:28px;margin-bottom:12px;font:11px/1.6 var(--rw-ui);color:var(--rw-muted)}\r
 .rw-app .rw-change-meta>span{display:inline-flex;align-items:center;gap:7px;min-width:0}\r
 .rw-app .rw-change-meta>span:before{content:'';width:5px;height:5px;flex:none;border-radius:50%;background:var(--change-ink)}\r
@@ -671,8 +697,12 @@ var refined_workbench_default = `/* CAS blue (#174994 sampled from the supplied 
 .rw-app .rw-change-meta select:focus-visible{outline:2px solid var(--rw-accent);outline-offset:2px}\r
 .rw-app .rw-change-pair{gap:24px;align-items:stretch}\r
 .rw-app .rw-change-pair p{margin:0;color:var(--rw-ink);font-size:15px;line-height:1.9;white-space:pre-wrap;overflow-wrap:anywhere}\r
-.rw-app .rw-change-pair p+p{padding-left:20px;border-left:1px solid #edf1f6}\r
-.rw-app .rw-change-pair .rw-word-change{color:#174994;background:#e8f0fc;border-radius:3px;padding:0;font-weight:500;box-decoration-break:clone;-webkit-box-decoration-break:clone}\r
+.rw-app .rw-change-pair .rw-change-after{padding-left:20px;border-left:1px solid #27364b25;min-width:0}\r
+.rw-app .rw-change-pair .rw-word-change{color:var(--change-ink);background:var(--change-mark);border-radius:3px;padding:0;font-weight:600;box-decoration-break:clone;-webkit-box-decoration-break:clone}\r
+.rw-app .rw-change-after textarea{box-sizing:border-box;display:block;width:100%;min-height:90px;resize:vertical;padding:8px;border:1px solid var(--change-ink);border-radius:8px;background:#ffffffb8;color:var(--rw-ink);font:15px/1.9 var(--rw-ui);white-space:pre-wrap}\r
+.rw-app .rw-suggestion-edit-button{margin-top:8px;padding:3px 8px;border:1px solid #27364b30;border-radius:6px;background:#ffffff80;color:var(--change-ink);font:11px/1.7 var(--rw-ui);cursor:pointer}\r
+.rw-app .rw-suggestion-edit-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}\r
+.rw-app .rw-word-update-status{position:absolute;top:12px;right:16px;z-index:3;padding:6px 12px;border:1px solid #b9d0ed;border-radius:9px;background:#f4f8ffed;color:#174994;font:12px/1.7 var(--rw-ui);pointer-events:none}\r
 .rw-app .rw-change-row>small{display:block;margin-top:14px;padding-top:9px;border-top:1px solid #f0f3f7;color:var(--rw-muted);font:11px/1.7 var(--rw-ui)}\r
 \r
 /* Low-frequency surfaces get a short composited entrance; no layout tweening. */\r
@@ -739,6 +769,9 @@ var refined_workbench_default = `/* CAS blue (#174994 sampled from the supplied 
   .rw-app button{transform:none!important}\r
 }\r
 `;
+
+// src/client/glass-workbench.css
+var glass_workbench_default = "/* Frosted chrome, solid reading surfaces. Blur stays outside the Word canvas;\n   scrolling, selection, resizing and the revision list never animate. */\n.rw-app.rw-app {\n  --rw-ink:#253246;\n  --rw-muted:#617087;\n  --rw-line:#7084a424;\n  --rw-accent:#174994;\n  --rw-canvas:#f4f7fb;\n  --rw-paper:#ffffff;\n  --rw-soft:#e5edf68f;\n  --rw-active:#dceaffd9;\n  --rw-ui:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI Variable Text','Microsoft YaHei UI',sans-serif;\n  --rw-glass:#f8fbffb8;\n  --rw-glass-solid:#f6f9fd;\n  --rw-glass-edge:#ffffffd9;\n  --rw-ease:cubic-bezier(.16,1,.3,1);\n  --rw-shadow:0 24px 64px #2138541c,0 4px 12px #2138540b,inset 0 1px 0 #ffffffd9;\n  --dsw-alias-button-info-fill:#174994!important;\n  --dsw-alias-button-info-hover:#123d7e!important;\n  --dsw-alias-state-business-primary:#174994!important;\n  background:radial-gradient(ellipse at 4% 3%,#dbe8f777,transparent 48%),radial-gradient(ellipse at 96% 100%,#e4eff366,transparent 45%),linear-gradient(145deg,#fafbfd,#f1f5fa)!important;\n}\n.rw-app .rw-topbar {\n  background:var(--rw-glass);\n  border-bottom:1px solid #ffffffa6;\n  box-shadow:0 1px 0 #687c9610;\n}\n.rw-app .rw-brand-emblem {\n  background:#174994;\n  box-shadow:none;\n}\n.rw-app .rw-topbar .rw-brand strong{letter-spacing:.015em}\n.rw-app .rw-sidebar {\n  background:#f1f6fc80;\n  border-right:1px solid #ffffff8c;\n}\n.rw-app .rw-project-picker {\n  background:#ffffff94!important;\n  border:1px solid #ffffffb8!important;\n  box-shadow:0 2px 6px #203c6006,inset 0 1px 0 #ffffffd9;\n}\n.rw-app .rw-nav button[aria-current=page] {\n  background:linear-gradient(125deg,#ffffffc9,#dceaffb3);\n  box-shadow:inset 0 0 0 1px #ffffffbd,0 3px 10px #305b8d0a;\n}\n.rw-app .rw-workspace{padding-top:10px;padding-left:10px}\n.rw-app .rw-pane {\n  border-color:var(--rw-glass-edge);\n  border-radius:20px;\n  background:#ffffffeb;\n  box-shadow:0 10px 36px #2946670c,0 1px 3px #29466708,inset 0 1px 0 #ffffff;\n}\n.rw-app :is(.rw-pane-head,.rw-pane-toolbar,.rw-word-toolbar,.rw-word-sidebar>header) {\n  background:#f9fbfdd9;\n  border-color:var(--rw-line);\n}\n.rw-app :is(.rw-word-toolbar,.rw-word-sidebar>header){height:42px;min-height:42px;box-sizing:border-box}\n.rw-app .rw-word-sidebar{background:#f8fafc}\n.rw-app .rw-word-conversation-document{background:#f8fafc;color:#617087}\n.rw-app .rw-word-sidebar-resizer{background:transparent}\n.rw-app .rw-word-sidebar-resizer:after,.rw-app .rw-splitter:after{background:#859bb65c;border-radius:4px}\n.rw-app :is(.rw-mode-tabs,.rw-word-sidebar>header>.rw-native-sentence-tabs) {\n  background:#6b829319;\n  border:1px solid #7084a414;\n  box-shadow:inset 0 1px 2px #425b7310;\n  border-radius:11px;\n}\n.rw-app :is(.rw-mode-tabs,.rw-native-sentence-tabs) button[aria-pressed=true] {\n  background:#fffffff2;\n  border-radius:8px;\n  color:var(--rw-ink);\n  box-shadow:0 1px 4px #263e5e1a,inset 0 1px 0 #fff;\n}\n.rw-app .rw-secondary {\n  background:#ffffffbd!important;\n  border-color:#7084a42e!important;\n  box-shadow:0 1px 2px #203c6008,inset 0 1px 0 #ffffffd9;\n}\n.rw-app .rw-primary {\n  background:#174994!important;\n  border-color:#174994!important;\n  box-shadow:none;\n}\n.rw-app .rw-primary:hover{background:#123d7e!important}\n.rw-app .rw-global-save{background:#ffffffbd!important;color:#174994!important;border-color:#cbd9ed!important;box-shadow:none;font-weight:500}\n.rw-app .rw-global-save:hover{background:#eaf1fb!important}\n.rw-app :is(input,textarea,select){box-shadow:inset 0 1px 2px #263e5e05}\n.rw-app :is(.rw-action-menu-body,.rw-modal,.rw-native-sentence-dialog) {\n  background:var(--rw-glass);\n  border:1px solid var(--rw-glass-edge);\n  box-shadow:var(--rw-shadow);\n}\n.rw-app .rw-modal-footer{background:#edf3f994}\n.rw-app .rw-modal::backdrop{background:#25395130}\n.rw-app .rw-native-sentence-dialog>header{background:#f6f9fcc7}\n.rw-app :is(.rw-native-sentence-body,.rw-native-frame) [data-composer-card] {\n  background:#ffffffed!important;\n  border-radius:18px;\n  box-shadow:0 0 0 1px #8298b32b,inset 0 1px 0 #ffffff!important;\n}\n/* Native DSH conversation surfaces share the workbench palette, including\n   its sticky composer fade. The manuscript iframe retains its own typography. */\n.rw-app.rw-app :is(.rw-native-frame,.rw-native-sentence-frame){\n  --dsw-alias-bg-base:#f8fafc!important;\n  --dsw-alias-bg-layer-1:#f8fafc!important;\n  --dsw-specific-bubble:#edf3fa!important;\n  --dsw-specific-bubble-highlight:#dee9f7!important;\n  --dsw-font-markdown-base:400 14px/1.85 var(--rw-ui)!important;\n  --dsw-font-markdown-base-strong:600 14px/1.85 var(--rw-ui)!important;\n  --dsw-specific-input-major:#ffffff!important;\n  background:#f8fafc!important;\n  font-family:var(--rw-ui);\n}\n.rw-app :is(.rw-native-frame,.rw-native-sentence-frame) [data-conversation-content]{background:#f8fafc!important}\n.rw-app :is(.rw-native-frame,.rw-native-sentence-frame) [data-conversation-region=messages]{padding-inline:16px}\n/* UserBubble is the shipped DSH 0.2.2 CSS module, also targeted by skins.\n   Override only its surface; keep code, tooltips and scientific markup intact. */\n.rw-app.rw-app :is(.rw-native-frame,.rw-native-sentence-frame) ._bubble_1sgyj_1{\n  background:#edf3fa!important;border:1px solid #dae5f2!important;border-radius:16px!important;\n  box-shadow:none!important;padding:11px 14px;font:400 14px/1.85 var(--rw-ui);color:var(--rw-ink)!important;\n}\n.rw-app.rw-app :is(.rw-native-frame,.rw-native-sentence-frame) [data-composer-input]{font:400 14px/1.75 var(--rw-ui);caret-color:#174994!important}\n.rw-app :is(.rw-word-target,.rw-word-selection-status,.rw-native-sentence-tools,.rw-template-preview){background:#f8fafc}\n.rw-app .rw-word-sidebar .rw-native-sentence-tools{border-color:var(--rw-line)}\n.rw-app .rw-word-sidebar .rw-native-sentence-tools>button{color:#174994}\n.rw-app .rw-word-save-notice,.rw-app .rw-toast {\n  background:#253e60ed;\n  border:1px solid #ffffff30;\n  box-shadow:0 8px 24px #1c355124,inset 0 1px 0 #ffffff17;\n}\n/* A few static glass layers, never one blur per sentence or control. */\n@supports (backdrop-filter:blur(1px)) {\n  .rw-app :is(.rw-topbar,.rw-sidebar,.rw-action-menu-body,.rw-modal,.rw-native-sentence-dialog) {\n    backdrop-filter:blur(18px) saturate(135%);\n  }\n}\n@supports not (backdrop-filter:blur(1px)) {\n  .rw-app :is(.rw-topbar,.rw-sidebar,.rw-action-menu-body,.rw-modal,.rw-native-sentence-dialog){background:var(--rw-glass-solid)}\n}\n/* Keep the four revision backgrounds opaque and instantly scannable. */\n.rw-app .rw-change-row{box-shadow:0 1px 3px #263e5e08}\n.rw-app .rw-change-after textarea{background:#fffffff2;color:var(--rw-ink)}\n.rw-app button{transition:background-color 130ms ease,color 130ms ease,transform 120ms var(--rw-ease)}\n.rw-app :is(.rw-action-menu-body,.rw-modal){animation-duration:180ms}\n.rw-app .rw-toast{animation:rw-glass-notice-in 160ms var(--rw-ease) both}\n@keyframes rw-glass-notice-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}\n@media(hover:hover) and (pointer:fine) {\n  .rw-app :is(.rw-project-picker,.rw-nav button,.rw-project-row):hover:not(:disabled){transform:none}\n  .rw-app :is(.rw-icon-button,.rw-primary,.rw-secondary):active:not(:disabled){transform:scale(.98)}\n}\n@media(max-width:780px){.rw-app .rw-workspace{padding-top:7px;padding-left:6px}.rw-app .rw-pane{border-radius:16px}}\n@media(prefers-reduced-transparency:reduce){\n  .rw-app :is(.rw-topbar,.rw-sidebar,.rw-action-menu-body,.rw-modal,.rw-native-sentence-dialog){background:var(--rw-glass-solid);backdrop-filter:none}\n}\n@media(prefers-reduced-motion:reduce){\n  .rw-app *,.rw-app *::before,.rw-app *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}\n  .rw-app button{transform:none!important}\n}\n";
 
 // src/client/RevisionTools.jsx
 var import_react5 = __toESM(require("react"), 1);
@@ -846,8 +879,38 @@ function wordDifferences(before, after) {
 function PromptPicker({ value, onChange, disabled }) {
   return /* @__PURE__ */ import_react5.default.createElement("label", { className: "rw-prompt-picker" }, "\u4FEE\u6539\u6A21\u677F", /* @__PURE__ */ import_react5.default.createElement("select", { "aria-label": "\u4FEE\u6539\u63D0\u793A\u8BCD\u6A21\u677F", disabled, value, onChange: (event) => onChange(event.target.value) }, PROMPT_TEMPLATES.map((item) => /* @__PURE__ */ import_react5.default.createElement("option", { key: item.id, value: item.id }, item.title))));
 }
-function SentenceComparison({ before, after, changes, onClassify, busy, compact = false }) {
+function SentenceComparison({ before, after, changes, onClassify, onEdit, onEditingChange, editable = false, busy, compact = false }) {
   const [error, setError] = import_react5.default.useState(""), [saving, setSaving] = import_react5.default.useState(false), [showUnchanged, setShowUnchanged] = import_react5.default.useState(!compact);
+  const [editing, setEditing] = import_react5.default.useState(null), [notice, setNotice] = import_react5.default.useState("");
+  const editingCallback = import_react5.default.useRef(onEditingChange);
+  editingCallback.current = onEditingChange;
+  import_react5.default.useEffect(() => {
+    editingCallback.current?.(Boolean(editing));
+    return () => editingCallback.current?.(false);
+  }, [Boolean(editing)]);
+  const textarea = import_react5.default.useRef(null);
+  import_react5.default.useLayoutEffect(() => {
+    const element = textarea.current;
+    if (element) {
+      element.style.height = "auto";
+      element.style.height = Math.max(90, element.scrollHeight) + "px";
+    }
+  }, [editing?.draft]);
+  const saveEdit = async () => {
+    if (!editing || saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      const { draft, rows: rows2, ...target } = editing;
+      await onEdit({ ...target, text: draft });
+      setEditing(null);
+      setNotice("\u672C\u53E5\u5EFA\u8BAE\u5DF2\u4FDD\u5B58\uFF0C\u91C7\u7528\u65F6\u4F1A\u4F7F\u7528\u7F16\u8F91\u540E\u7684\u6587\u5B57\u3002");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
   const classify2 = async (data) => {
     setSaving(true);
     setError("");
@@ -861,7 +924,21 @@ function SentenceComparison({ before, after, changes, onClassify, busy, compact 
   };
   const rows = import_react5.default.useMemo(() => compareSentences(before, after, changes).map((row) => ({ ...row, words: wordDifferences(row.before, row.after) })), [before, after, changes]);
   const highlight = (parts) => parts.map((part, index) => part.changed ? /* @__PURE__ */ import_react5.default.createElement("mark", { className: "rw-word-change", key: index }, part.text) : part.text);
-  return /* @__PURE__ */ import_react5.default.createElement("div", { className: "rw-colored-comparison" }, /* @__PURE__ */ import_react5.default.createElement("div", { className: "rw-change-legend", "aria-label": "\u4FEE\u6539\u7A0B\u5EA6\u56FE\u4F8B" }, Object.entries(CHANGE_LABELS).map(([kind, label]) => /* @__PURE__ */ import_react5.default.createElement("span", { key: kind, "data-kind": kind }, label))), /* @__PURE__ */ import_react5.default.createElement("p", { className: "rw-review-help" }, "\u81EA\u52A8\u5206\u7C7B\u4F9B\u590D\u6838\uFF0C\u53EF\u624B\u52A8\u66F4\u6B63\u3002"), error && /* @__PURE__ */ import_react5.default.createElement("p", { role: "alert" }, error), compact && /* @__PURE__ */ import_react5.default.createElement("label", { className: "rw-change-filter" }, /* @__PURE__ */ import_react5.default.createElement("input", { type: "checkbox", checked: showUnchanged, onChange: (event) => setShowUnchanged(event.target.checked) }), "\u663E\u793A\u672A\u4FEE\u6539\u53E5\u5B50\uFF08", rows.filter((row) => row.kind === "unchanged").length, "\uFF09"), /* @__PURE__ */ import_react5.default.createElement("div", { className: "rw-change-head" }, /* @__PURE__ */ import_react5.default.createElement("b", null, "\u4FEE\u6539\u524D"), /* @__PURE__ */ import_react5.default.createElement("b", null, "\u4FEE\u6539\u540E")), rows.map((row, index) => (showUnchanged || row.kind !== "unchanged") && /* @__PURE__ */ import_react5.default.createElement("div", { className: "rw-change-row", key: index, "data-kind": row.kind }, /* @__PURE__ */ import_react5.default.createElement("div", { className: "rw-change-meta" }, /* @__PURE__ */ import_react5.default.createElement("span", null, CHANGE_LABELS[row.kind], " \xB7 ", row.source === "exact" ? "\u6587\u5B57\u4E00\u81F4" : row.source === "author" ? "\u4F5C\u8005\u786E\u8BA4" : row.source === "model" ? "\u6A21\u578B\u5224\u65AD" : "\u521D\u5224\u5F85\u6838\u5BF9"), onClassify && row.before !== row.after && /* @__PURE__ */ import_react5.default.createElement("select", { "aria-label": `\u7B2C ${index + 1} \u53E5\u4FEE\u6539\u5206\u7C7B`, value: row.kind, disabled: busy || saving, onChange: (event) => void classify2({ index, before: row.before, after: row.after, kind: event.target.value }) }, Object.entries(CHANGE_LABELS).filter(([kind]) => kind !== "unchanged").map(([kind, label]) => /* @__PURE__ */ import_react5.default.createElement("option", { key: kind, value: kind }, label)))), /* @__PURE__ */ import_react5.default.createElement("div", { className: "rw-change-pair" }, /* @__PURE__ */ import_react5.default.createElement("p", { "aria-label": "\u4FEE\u6539\u524D" }, row.before ? highlight(row.words.before) : /* @__PURE__ */ import_react5.default.createElement("em", null, "\u65B0\u589E")), /* @__PURE__ */ import_react5.default.createElement("p", { "aria-label": "\u4FEE\u6539\u540E" }, row.after ? highlight(row.words.after) : /* @__PURE__ */ import_react5.default.createElement("em", null, "\u5220\u9664"))), /* @__PURE__ */ import_react5.default.createElement("small", null, row.reason))));
+  return /* @__PURE__ */ import_react5.default.createElement("div", { className: "rw-colored-comparison" }, /* @__PURE__ */ import_react5.default.createElement("div", { className: "rw-change-legend", "aria-label": "\u4FEE\u6539\u7A0B\u5EA6\u56FE\u4F8B" }, Object.entries(CHANGE_LABELS).map(([kind, label]) => /* @__PURE__ */ import_react5.default.createElement("span", { key: kind, "data-kind": kind }, label))), /* @__PURE__ */ import_react5.default.createElement("p", { className: "rw-review-help" }, "\u81EA\u52A8\u5206\u7C7B\u4F9B\u590D\u6838\uFF0C\u53EF\u624B\u52A8\u66F4\u6B63\u3002", editable && onEdit ? "\u70B9\u51FB\u201C\u7F16\u8F91\u672C\u53E5\u201D\u53EF\u8C03\u6574\u6539\u540E\u6587\u5B57\uFF0C\u4FDD\u5B58\u540E\u518D\u91C7\u7528\u3002" : ""), editing && editing.expectedReplacement !== after && /* @__PURE__ */ import_react5.default.createElement("p", { role: "status" }, "\u5EFA\u8BAE\u5DF2\u6709\u66F4\u65B0\uFF0C\u4F60\u6B63\u5728\u7F16\u8F91\u7684\u6587\u5B57\u5DF2\u4FDD\u7559\uFF0C\u8BF7\u5148\u6838\u5BF9\u3002"), error && /* @__PURE__ */ import_react5.default.createElement("p", { role: "alert" }, error), notice && /* @__PURE__ */ import_react5.default.createElement("p", { className: "rw-review-help", role: "status" }, notice), compact && /* @__PURE__ */ import_react5.default.createElement("label", { className: "rw-change-filter" }, /* @__PURE__ */ import_react5.default.createElement("input", { type: "checkbox", checked: showUnchanged, onChange: (event) => setShowUnchanged(event.target.checked) }), "\u663E\u793A\u672A\u4FEE\u6539\u53E5\u5B50\uFF08", rows.filter((row) => row.kind === "unchanged").length, "\uFF09"), /* @__PURE__ */ import_react5.default.createElement("div", { className: "rw-change-head" }, /* @__PURE__ */ import_react5.default.createElement("b", null, "\u4FEE\u6539\u524D"), /* @__PURE__ */ import_react5.default.createElement("b", null, "\u4FEE\u6539\u540E")), (editing?.rows || rows).map((row, index) => (showUnchanged || row.kind !== "unchanged") && /* @__PURE__ */ import_react5.default.createElement("div", { className: "rw-change-row", key: index, "data-kind": row.kind }, /* @__PURE__ */ import_react5.default.createElement("div", { className: "rw-change-meta" }, /* @__PURE__ */ import_react5.default.createElement("span", null, CHANGE_LABELS[row.kind], " \xB7 ", row.source === "exact" ? "\u6587\u5B57\u4E00\u81F4" : row.source === "author" ? "\u4F5C\u8005\u786E\u8BA4" : row.source === "model" ? "\u6A21\u578B\u5224\u65AD" : "\u521D\u5224\u5F85\u6838\u5BF9"), onClassify && row.before !== row.after && /* @__PURE__ */ import_react5.default.createElement("select", { "aria-label": `\u7B2C ${index + 1} \u53E5\u4FEE\u6539\u5206\u7C7B`, value: row.kind, disabled: busy || saving || Boolean(editing), onChange: (event) => void classify2({ index, before: row.before, after: row.after, kind: event.target.value }) }, Object.entries(CHANGE_LABELS).filter(([kind]) => kind !== "unchanged").map(([kind, label]) => /* @__PURE__ */ import_react5.default.createElement("option", { key: kind, value: kind }, label)))), /* @__PURE__ */ import_react5.default.createElement("div", { className: "rw-change-pair" }, /* @__PURE__ */ import_react5.default.createElement("p", { "aria-label": "\u4FEE\u6539\u524D" }, row.before ? highlight(row.words.before) : /* @__PURE__ */ import_react5.default.createElement("em", null, "\u65B0\u589E")), /* @__PURE__ */ import_react5.default.createElement("div", { className: "rw-change-after" }, editing?.index === index ? /* @__PURE__ */ import_react5.default.createElement(import_react5.default.Fragment, null, /* @__PURE__ */ import_react5.default.createElement("textarea", { ref: textarea, "aria-label": `\u7B2C ${index + 1} \u53E5\u6539\u540E\u6587\u5B57`, autoFocus: true, value: editing.draft, disabled: busy || saving, maxLength: 8e3, onChange: (event) => setEditing((value) => ({ ...value, draft: event.target.value })), onKeyDown: (event) => {
+    if (event.key === "Escape") {
+      event.stopPropagation();
+      if (!saving) setEditing(null);
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      event.stopPropagation();
+      void saveEdit();
+    }
+  } }), /* @__PURE__ */ import_react5.default.createElement("div", { className: "rw-suggestion-edit-actions" }, /* @__PURE__ */ import_react5.default.createElement("button", { className: "rw-secondary", disabled: busy || saving || !editable, onClick: () => void saveEdit() }, saving ? "\u6B63\u5728\u4FDD\u5B58\u2026" : "\u4FDD\u5B58\u672C\u53E5"), /* @__PURE__ */ import_react5.default.createElement("button", { className: "rw-quiet", disabled: saving, onClick: () => setEditing(null) }, "\u53D6\u6D88\u7F16\u8F91"))) : /* @__PURE__ */ import_react5.default.createElement(import_react5.default.Fragment, null, /* @__PURE__ */ import_react5.default.createElement("p", { "aria-label": "\u4FEE\u6539\u540E" }, row.after ? highlight(row.words.after) : /* @__PURE__ */ import_react5.default.createElement("em", null, "\u5220\u9664")), editable && onEdit && /* @__PURE__ */ import_react5.default.createElement("button", { className: "rw-suggestion-edit-button", disabled: busy || saving || Boolean(editing), "aria-label": `\u7F16\u8F91\u7B2C ${index + 1} \u53E5\u5EFA\u8BAE`, onClick: () => {
+    setError("");
+    setNotice("");
+    setEditing({ index, before: row.before, after: row.after, expectedReplacement: after, draft: row.after, rows });
+  } }, "\u7F16\u8F91\u672C\u53E5")))), /* @__PURE__ */ import_react5.default.createElement("small", null, row.reason))));
 }
 function DocumentHistory({ api: api2, project, object, onRestore }) {
   const [data, setData] = import_react5.default.useState(null), [detail, setDetail] = import_react5.default.useState(null), [error, setError] = import_react5.default.useState(""), [busy, setBusy] = import_react5.default.useState(false), [confirm, setConfirm] = import_react5.default.useState(false);
@@ -44173,13 +44250,14 @@ var katex_generated_default = '@font-face{font-display:block;font-family:KaTeX_A
 
 // src/client/SentenceEditor.jsx
 var DEFAULT_PROMPT = DEFAULT_REVISION_PROMPT;
-function RevisionPanel({ anchor, job, busy, error, onGenerate, onAction, onClassify, onClose, onImport, modelReady, currentRevision, workingCopy = false, embedded = false }) {
+function RevisionPanel({ anchor, job, busy, error, onGenerate, onAction, onClassify, onEditSuggestion, onEditingChange, onClose, onImport, modelReady, currentRevision, workingCopy = false, embedded = false }) {
   const [instruction, setInstruction] = import_react6.default.useState(DEFAULT_PROMPT);
   const [template, setTemplate] = import_react6.default.useState("scientific");
   const [keywords, setKeywords] = import_react6.default.useState("");
   const [advanced, setAdvanced] = import_react6.default.useState(false);
   const [refining, setRefining] = import_react6.default.useState(false);
   const [imported, setImported] = import_react6.default.useState("");
+  const [editingSuggestion, setEditingSuggestion] = import_react6.default.useState(false);
   const fileRef = import_react6.default.useRef(null);
   const bodyRef = import_react6.default.useRef(null);
   const [viewport, setViewport] = import_react6.default.useState(() => ({ width: globalThis.window?.innerWidth || 1200, height: globalThis.window?.innerHeight || 800 }));
@@ -44191,14 +44269,17 @@ function RevisionPanel({ anchor, job, busy, error, onGenerate, onAction, onClass
   const output = job?.output, proposal = output?.proposal;
   import_react6.default.useLayoutEffect(() => {
     if (proposal && bodyRef.current) bodyRef.current.scrollTop = 0;
-  }, [job?.id, proposal?.replacement]);
+  }, [job?.id]);
   const running = ["queued", "running"].includes(job?.status), pending = output?.review === "pending";
   const outdated = job?.status === "outdated" || pending && Number.isInteger(currentRevision) && output.expectedRevision !== currentRevision;
   const undoOutdated = output?.review === "adopted" && Number.isInteger(currentRevision) && output.appliedRevision !== currentRevision;
   const original = output?.original || anchor?.selectedText || "";
   const position = anchor?.position || { left: Math.max(16, viewport.width / 2 - 220), top: 100 };
   const top = Math.max(16, Math.min(position.top, viewport.height - (proposal ? 620 : 370)));
-  return /* @__PURE__ */ import_react6.default.createElement("aside", { className: `rw-sentence-panel${embedded ? " rw-sentence-embedded" : ""}`, role: embedded ? "region" : "dialog", "aria-label": embedded ? "\u6539\u5199\u5BF9\u7167\u4E0E\u6587\u732E\u4F9D\u636E" : "\u9009\u53E5\u4FEE\u6539", style: embedded ? { position: "static", width: "100%", height: "100%", maxHeight: "none", border: 0, borderRadius: 0, boxShadow: "none" } : { left: Math.max(12, Math.min(position.left, viewport.width - 456)), top, maxHeight: viewport.height - top - 16 }, onMouseDown: (event) => event.stopPropagation() }, /* @__PURE__ */ import_react6.default.createElement("header", null, /* @__PURE__ */ import_react6.default.createElement("span", { className: "rw-sentence-mark" }, /* @__PURE__ */ import_react6.default.createElement(Icon, { name: "write", size: 17 })), /* @__PURE__ */ import_react6.default.createElement("div", null, /* @__PURE__ */ import_react6.default.createElement("strong", null, embedded ? "\u6539\u5199\u5BF9\u7167" : "\u9009\u53E5\u4FEE\u6539"), /* @__PURE__ */ import_react6.default.createElement("small", null, "\u7ED3\u5408\u5168\u6587 \xB7 \u68C0\u7D22\u6587\u732E \xB7 \u5BF9\u7167\u91C7\u7528")), !embedded && /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-icon-button", "aria-label": "\u5173\u95ED\u9009\u53E5\u4FEE\u6539", onClick: onClose }, /* @__PURE__ */ import_react6.default.createElement(Icon, { name: "close", size: 15 }))), /* @__PURE__ */ import_react6.default.createElement("div", { ref: bodyRef, className: "rw-sentence-body" }, proposal ? /* @__PURE__ */ import_react6.default.createElement(SentenceComparison, { before: original, after: proposal.replacement, changes: proposal.sentenceChanges, busy, onClassify: onClassify ? (data) => onClassify(job.id, data) : void 0 }) : /* @__PURE__ */ import_react6.default.createElement(import_react6.default.Fragment, null, /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-sentence-label" }, "\u5DF2\u9009\u6B63\u6587"), /* @__PURE__ */ import_react6.default.createElement("blockquote", { className: "rw-sentence-original" }, original)), anchor && (!proposal || refining) && !output?.review?.match(/adopted|undone/) && /* @__PURE__ */ import_react6.default.createElement(import_react6.default.Fragment, null, /* @__PURE__ */ import_react6.default.createElement(PromptPicker, { value: template, disabled: running || busy, onChange: (id) => {
+  return /* @__PURE__ */ import_react6.default.createElement("aside", { className: `rw-sentence-panel${embedded ? " rw-sentence-embedded" : ""}`, role: embedded ? "region" : "dialog", "aria-label": embedded ? "\u6539\u5199\u5BF9\u7167\u4E0E\u6587\u732E\u4F9D\u636E" : "\u9009\u53E5\u4FEE\u6539", style: embedded ? { position: "static", width: "100%", height: "100%", maxHeight: "none", border: 0, borderRadius: 0, boxShadow: "none" } : { left: Math.max(12, Math.min(position.left, viewport.width - 456)), top, maxHeight: viewport.height - top - 16 }, onMouseDown: (event) => event.stopPropagation() }, /* @__PURE__ */ import_react6.default.createElement("header", null, /* @__PURE__ */ import_react6.default.createElement("span", { className: "rw-sentence-mark" }, /* @__PURE__ */ import_react6.default.createElement(Icon, { name: "write", size: 17 })), /* @__PURE__ */ import_react6.default.createElement("div", null, /* @__PURE__ */ import_react6.default.createElement("strong", null, embedded ? "\u6539\u5199\u5BF9\u7167" : "\u9009\u53E5\u4FEE\u6539"), /* @__PURE__ */ import_react6.default.createElement("small", null, "\u7ED3\u5408\u5168\u6587 \xB7 \u68C0\u7D22\u6587\u732E \xB7 \u5BF9\u7167\u91C7\u7528")), !embedded && /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-icon-button", "aria-label": "\u5173\u95ED\u9009\u53E5\u4FEE\u6539", onClick: onClose }, /* @__PURE__ */ import_react6.default.createElement(Icon, { name: "close", size: 15 }))), /* @__PURE__ */ import_react6.default.createElement("div", { ref: bodyRef, className: "rw-sentence-body" }, proposal ? /* @__PURE__ */ import_react6.default.createElement(SentenceComparison, { key: job.id, before: original, after: proposal.replacement, changes: proposal.sentenceChanges, busy, editable: pending && !outdated && job.status === "succeeded", onEditingChange: (value) => {
+    setEditingSuggestion(value);
+    onEditingChange?.(value);
+  }, onEdit: onEditSuggestion ? (data) => onEditSuggestion(job.id, data) : void 0, onClassify: onClassify ? (data) => onClassify(job.id, data) : void 0 }) : /* @__PURE__ */ import_react6.default.createElement(import_react6.default.Fragment, null, /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-sentence-label" }, "\u5DF2\u9009\u6B63\u6587"), /* @__PURE__ */ import_react6.default.createElement("blockquote", { className: "rw-sentence-original" }, original)), anchor && (!proposal || refining) && !output?.review?.match(/adopted|undone/) && /* @__PURE__ */ import_react6.default.createElement(import_react6.default.Fragment, null, /* @__PURE__ */ import_react6.default.createElement(PromptPicker, { value: template, disabled: running || busy, onChange: (id) => {
     setTemplate(id);
     setInstruction(PROMPT_TEMPLATES.find((item) => item.id === id).prompt);
   } }), /* @__PURE__ */ import_react6.default.createElement("label", { className: "rw-sentence-label", htmlFor: "rw-sentence-request" }, "\u4F60\u7684\u4FEE\u6539\u8981\u6C42"), /* @__PURE__ */ import_react6.default.createElement("textarea", { id: "rw-sentence-request", "aria-label": "\u53E5\u5B50\u4FEE\u6539\u8981\u6C42", placeholder: "\u4F8B\u5982\uFF1A\u66F4\u7B80\u6D01\uFF1B\u5F3A\u8C03\u7814\u7A76\u610F\u4E49\uFF1B\u6838\u5BF9\u56E0\u679C\u5173\u7CFB\u2026\u2026", value: instruction, onChange: (event) => setInstruction(event.target.value), maxLength: 6e3, disabled: running || busy }), /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-sentence-presets" }, ["\u66F4\u7B80\u6D01", "\u589E\u5F3A\u903B\u8F91\u8854\u63A5", "\u6838\u5BF9\u8BC1\u636E\u4E0E\u63AA\u8F9E"].map((text2) => /* @__PURE__ */ import_react6.default.createElement("button", { key: text2, disabled: running || busy, onClick: () => setInstruction(text2) }, text2))), /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-sentence-disclosure", "aria-expanded": advanced, onClick: () => setAdvanced(!advanced) }, /* @__PURE__ */ import_react6.default.createElement(Icon, { name: "search", size: 12 }), "\u6587\u732E\u68C0\u7D22\u8BBE\u7F6E", /* @__PURE__ */ import_react6.default.createElement(Icon, { name: "down", size: 10 })), advanced && /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-sentence-retrieval" }, /* @__PURE__ */ import_react6.default.createElement("label", null, "\u6587\u732E\u5173\u952E\u8BCD\uFF08\u53EF\u9009\uFF09", /* @__PURE__ */ import_react6.default.createElement("input", { "aria-label": "\u6587\u732E\u5173\u952E\u8BCD", value: keywords, maxLength: 500, onChange: (event) => setKeywords(event.target.value), placeholder: "\u7559\u7A7A\u5219\u4ECE\u9009\u53E5\u63D0\u53D6\uFF0C\u652F\u6301\u4E2D\u82F1\u6587\u5173\u952E\u8BCD" })), /* @__PURE__ */ import_react6.default.createElement("p", null, "\u4F18\u5148\u68C0\u7D22 Zotero MCP \u5168\u6587\u4E0E\u672C\u5730\u5DF2\u89E3\u6790\u6587\u732E\u3002\u5173\u952E\u8BCD\u547D\u4E2D\u540E\uFF0C\u518D\u5224\u65AD\u8BC1\u636E\u662F\u5426\u652F\u6301\u8868\u8FBE\u3002"), /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-quiet", disabled: busy || running, onClick: () => fileRef.current.click() }, /* @__PURE__ */ import_react6.default.createElement(Icon, { name: "upload", size: 12 }), "\u6DFB\u52A0\u5DF2\u89E3\u6790\u6587\u732E Markdown"), /* @__PURE__ */ import_react6.default.createElement("input", { hidden: true, ref: fileRef, type: "file", accept: ".md,.markdown,.txt", "aria-label": "\u6DFB\u52A0\u672C\u5730\u6587\u732E", onChange: async (event) => {
@@ -44212,11 +44293,12 @@ function RevisionPanel({ anchor, job, busy, error, onGenerate, onAction, onClass
       setImported(error2.message);
     }
     event.target.value = "";
-  } }), imported && /* @__PURE__ */ import_react6.default.createElement("p", { role: "status" }, imported)), anchor && /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-sentence-generate" }, /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-secondary", disabled: running || busy || !modelReady, onClick: () => onGenerate(DEFAULT_PROMPT, keywords, job?.id), title: DEFAULT_PROMPT }, "\u9ED8\u8BA4\u5B66\u672F\u6DA6\u8272"), /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-primary", disabled: !instruction.trim() || running || busy || !modelReady, onClick: () => onGenerate(instruction, keywords, job?.id) }, proposal ? "\u6309\u8981\u6C42\u7EE7\u7EED\u4FEE\u6539" : "\u6309\u8981\u6C42\u4FEE\u6539", /* @__PURE__ */ import_react6.default.createElement(Icon, { name: "arrow", size: 13 })))), !embedded && !modelReady && /* @__PURE__ */ import_react6.default.createElement("p", { className: "rw-sentence-warning" }, "\u539F\u751F\u6A21\u578B\u670D\u52A1\u5C1A\u672A\u52A0\u8F7D\u3002\u8BF7\u91CD\u542F DSH \u5E94\u7528\u4E0E Host\uFF0C\u6CBF\u7528\u5DF2\u6709\u6A21\u578B\u914D\u7F6E\u3002"), (running || busy) && /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-sentence-progress", role: "status" }, /* @__PURE__ */ import_react6.default.createElement("span", null), busy ? "\u6B63\u5728\u4FDD\u5B58\u4E0E\u51C6\u5907\u2026" : job.phase), error && /* @__PURE__ */ import_react6.default.createElement("p", { role: "alert", className: "rw-sentence-warning" }, error), job?.error && /* @__PURE__ */ import_react6.default.createElement("p", { role: "alert", className: "rw-sentence-warning" }, job.error), proposal && /* @__PURE__ */ import_react6.default.createElement(import_react6.default.Fragment, null, output.instruction && /* @__PURE__ */ import_react6.default.createElement("p", { className: "rw-sentence-reason" }, "\u4FEE\u6539\u8981\u6C42\uFF1A", output.instruction), /* @__PURE__ */ import_react6.default.createElement("p", { className: "rw-sentence-reason" }, proposal.reason), /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-sentence-context" }, /* @__PURE__ */ import_react6.default.createElement(Icon, { name: "file", size: 12 }), /* @__PURE__ */ import_react6.default.createElement("span", null, "\u6574\u7BC7\u7A3F\u4EF6\u5DF2\u5E26\u5165 \xB7 ", workingCopy ? "\u4FEE\u8BA2 r" : "v", output.expectedRevision), /* @__PURE__ */ import_react6.default.createElement("span", null, output.model?.model)), [...output.evidence?.warnings || [], ...proposal.warnings].map((warning, index) => /* @__PURE__ */ import_react6.default.createElement("p", { className: "rw-sentence-warning", key: index }, warning)), /* @__PURE__ */ import_react6.default.createElement("details", { className: "rw-evidence-list", open: embedded || void 0 }, /* @__PURE__ */ import_react6.default.createElement("summary", null, "\u6587\u732E\u4F9D\u636E \xB7 ", proposal.evidenceIds.length, " \u6761\u7528\u4E8E\u5EFA\u8BAE / ", output.evidence.sources.length, " \u6761\u547D\u4E2D"), /* @__PURE__ */ import_react6.default.createElement("p", { className: "rw-context-muted" }, "\u68C0\u7D22\u8BCD\uFF1A", output.evidence.terms.join("\u3001") || "\u65E0", " \xB7 Zotero ", output.evidence.zotero === "searched" ? "\u5DF2\u68C0\u7D22" : "\u4E0D\u53EF\u7528"), output.evidence.sources.map((source) => /* @__PURE__ */ import_react6.default.createElement("article", { key: source.id, className: "rw-evidence-card" }, /* @__PURE__ */ import_react6.default.createElement("div", null, /* @__PURE__ */ import_react6.default.createElement("b", null, source.id), /* @__PURE__ */ import_react6.default.createElement("span", null, proposal.evidenceIds.includes(source.id) ? "\u7528\u4E8E\u672C\u6B21\u5EFA\u8BAE" : "\u68C0\u7D22\u547D\u4E2D \xB7 \u672A\u91C7\u7528")), /* @__PURE__ */ import_react6.default.createElement("strong", null, source.title), /* @__PURE__ */ import_react6.default.createElement("small", null, source.kind, " \xB7 ", source.locator, source.synthetic ? " \xB7 \u5408\u6210\u6D4B\u8BD5\u8D44\u6599" : ""), /* @__PURE__ */ import_react6.default.createElement("blockquote", null, source.snippet), source.url && /* @__PURE__ */ import_react6.default.createElement("a", { href: source.url }, "\u5728 Zotero \u4E2D\u5B9A\u4F4D\u6587\u732E \u2197")))), outdated && /* @__PURE__ */ import_react6.default.createElement("p", { className: "rw-sentence-warning" }, workingCopy ? "\u6B63\u6587\u5DF2\u6709\u540E\u7EED\u4FEE\u6539\uFF0C\u8BF7\u5728\u5F53\u524D\u6B63\u6587\u91CD\u65B0\u9009\u53E5\u3002" : "\u6B63\u6587\u5DF2\u6709\u65B0\u7248\u672C\uFF0C\u539F\u6587\u4FDD\u6301\u4E0D\u53D8\u3002\u8BF7\u5728\u6700\u65B0\u6B63\u6587\u91CD\u65B0\u9009\u53E5\u3002"), undoOutdated && /* @__PURE__ */ import_react6.default.createElement("p", { className: "rw-sentence-warning" }, "\u91C7\u7528\u540E\u6B63\u6587\u5DF2\u6709\u66F4\u65B0\uFF0C\u4E0D\u80FD\u76F4\u63A5\u64A4\u56DE\u3002\u8BF7\u5148\u67E5\u770B\u7248\u672C\u8BB0\u5F55\uFF0C\u4FDD\u7559\u540E\u7EED\u4FEE\u6539\u3002"), anchor && pending && !refining && /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-secondary", onClick: () => setRefining(true) }, "\u7EE7\u7EED\u63D0\u8981\u6C42")), running && /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-quiet", onClick: () => onAction("cancelJob", job.id) }, "\u53D6\u6D88\u672C\u6B21\u751F\u6210")), proposal && /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-sentence-review" }, pending && /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-primary", disabled: busy || outdated || job.status !== "succeeded", onClick: () => onAction("applySentence", job.id) }, /* @__PURE__ */ import_react6.default.createElement(Icon, { name: "check", size: 14 }), "\u91C7\u7528\u4FEE\u6539", job.native ? "\uFF08Ctrl+Alt+A\uFF09" : ""), output.review === "adopted" && /* @__PURE__ */ import_react6.default.createElement(import_react6.default.Fragment, null, /* @__PURE__ */ import_react6.default.createElement("span", null, /* @__PURE__ */ import_react6.default.createElement(Icon, { name: "check", size: 13 }), workingCopy ? "\u5DF2\u4FDD\u5B58\u5230\u5DE5\u4F5C\u526F\u672C" : `\u5DF2\u4FDD\u5B58 v${output.appliedRevision}`), /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-secondary", disabled: busy || undoOutdated, onClick: () => onAction("undoSentence", job.id) }, "\u64A4\u56DE\u672C\u6B21\u91C7\u7528", job.native ? "\uFF08Ctrl+Alt+Z\uFF09" : "")), output.review === "undone" && /* @__PURE__ */ import_react6.default.createElement("span", null, "\u5DF2\u64A4\u56DE \xB7 \u4FEE\u6539\u5386\u53F2\u4FDD\u7559"), pending && /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-quiet", onClick: onClose }, "\u4FDD\u7559\u539F\u6587")), /* @__PURE__ */ import_react6.default.createElement("footer", null, workingCopy ? "\u91C7\u7528\u540E\u66F4\u65B0\u540C\u4E00 Word \u5DE5\u4F5C\u526F\u672C \xB7 \u652F\u6301\u64A4\u56DE" : "\u53EA\u6709\u91C7\u7528\u540E\u624D\u66FF\u6362\u539F\u53E5 \xB7 \u6BCF\u6B21\u4FEE\u6539\u4FDD\u7559\u7248\u672C"));
+  } }), imported && /* @__PURE__ */ import_react6.default.createElement("p", { role: "status" }, imported)), anchor && /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-sentence-generate" }, /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-secondary", disabled: running || busy || !modelReady, onClick: () => onGenerate(DEFAULT_PROMPT, keywords, job?.id), title: DEFAULT_PROMPT }, "\u9ED8\u8BA4\u5B66\u672F\u6DA6\u8272"), /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-primary", disabled: !instruction.trim() || running || busy || !modelReady, onClick: () => onGenerate(instruction, keywords, job?.id) }, proposal ? "\u6309\u8981\u6C42\u7EE7\u7EED\u4FEE\u6539" : "\u6309\u8981\u6C42\u4FEE\u6539", /* @__PURE__ */ import_react6.default.createElement(Icon, { name: "arrow", size: 13 })))), !embedded && !modelReady && /* @__PURE__ */ import_react6.default.createElement("p", { className: "rw-sentence-warning" }, "\u539F\u751F\u6A21\u578B\u670D\u52A1\u5C1A\u672A\u52A0\u8F7D\u3002\u8BF7\u91CD\u542F DSH \u5E94\u7528\u4E0E Host\uFF0C\u6CBF\u7528\u5DF2\u6709\u6A21\u578B\u914D\u7F6E\u3002"), (running || busy) && /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-sentence-progress", role: "status" }, /* @__PURE__ */ import_react6.default.createElement("span", null), busy ? "\u6B63\u5728\u4FDD\u5B58\u4E0E\u51C6\u5907\u2026" : job.phase), error && /* @__PURE__ */ import_react6.default.createElement("p", { role: "alert", className: "rw-sentence-warning" }, error), job?.error && /* @__PURE__ */ import_react6.default.createElement("p", { role: "alert", className: "rw-sentence-warning" }, job.error), proposal && /* @__PURE__ */ import_react6.default.createElement(import_react6.default.Fragment, null, output.instruction && /* @__PURE__ */ import_react6.default.createElement("p", { className: "rw-sentence-reason" }, "\u4FEE\u6539\u8981\u6C42\uFF1A", output.instruction), /* @__PURE__ */ import_react6.default.createElement("p", { className: "rw-sentence-reason" }, proposal.reason), /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-sentence-context" }, /* @__PURE__ */ import_react6.default.createElement(Icon, { name: "file", size: 12 }), /* @__PURE__ */ import_react6.default.createElement("span", null, "\u6574\u7BC7\u7A3F\u4EF6\u5DF2\u5E26\u5165 \xB7 ", workingCopy ? "\u4FEE\u8BA2 r" : "v", output.expectedRevision), /* @__PURE__ */ import_react6.default.createElement("span", null, output.model?.model)), [...output.evidence?.warnings || [], ...proposal.warnings].map((warning, index) => /* @__PURE__ */ import_react6.default.createElement("p", { className: "rw-sentence-warning", key: index }, warning)), /* @__PURE__ */ import_react6.default.createElement("details", { className: "rw-evidence-list", open: embedded || void 0 }, /* @__PURE__ */ import_react6.default.createElement("summary", null, "\u6587\u732E\u4F9D\u636E \xB7 ", proposal.evidenceIds.length, " \u6761\u7528\u4E8E\u5EFA\u8BAE / ", output.evidence.sources.length, " \u6761\u547D\u4E2D"), /* @__PURE__ */ import_react6.default.createElement("p", { className: "rw-context-muted" }, "\u68C0\u7D22\u8BCD\uFF1A", output.evidence.terms.join("\u3001") || "\u65E0", " \xB7 Zotero ", output.evidence.zotero === "searched" ? "\u5DF2\u68C0\u7D22" : "\u4E0D\u53EF\u7528"), output.evidence.sources.map((source) => /* @__PURE__ */ import_react6.default.createElement("article", { key: source.id, className: "rw-evidence-card" }, /* @__PURE__ */ import_react6.default.createElement("div", null, /* @__PURE__ */ import_react6.default.createElement("b", null, source.id), /* @__PURE__ */ import_react6.default.createElement("span", null, proposal.evidenceIds.includes(source.id) ? "\u7528\u4E8E\u672C\u6B21\u5EFA\u8BAE" : "\u68C0\u7D22\u547D\u4E2D \xB7 \u672A\u91C7\u7528")), /* @__PURE__ */ import_react6.default.createElement("strong", null, source.title), /* @__PURE__ */ import_react6.default.createElement("small", null, source.kind, " \xB7 ", source.locator, source.synthetic ? " \xB7 \u5408\u6210\u6D4B\u8BD5\u8D44\u6599" : ""), /* @__PURE__ */ import_react6.default.createElement("blockquote", null, source.snippet), source.url && /* @__PURE__ */ import_react6.default.createElement("a", { href: source.url }, "\u5728 Zotero \u4E2D\u5B9A\u4F4D\u6587\u732E \u2197")))), outdated && /* @__PURE__ */ import_react6.default.createElement("p", { className: "rw-sentence-warning" }, workingCopy ? "\u6B63\u6587\u5DF2\u6709\u540E\u7EED\u4FEE\u6539\uFF0C\u8BF7\u5728\u5F53\u524D\u6B63\u6587\u91CD\u65B0\u9009\u53E5\u3002" : "\u6B63\u6587\u5DF2\u6709\u65B0\u7248\u672C\uFF0C\u539F\u6587\u4FDD\u6301\u4E0D\u53D8\u3002\u8BF7\u5728\u6700\u65B0\u6B63\u6587\u91CD\u65B0\u9009\u53E5\u3002"), undoOutdated && /* @__PURE__ */ import_react6.default.createElement("p", { className: "rw-sentence-warning" }, "\u91C7\u7528\u540E\u6B63\u6587\u5DF2\u6709\u66F4\u65B0\uFF0C\u4E0D\u80FD\u76F4\u63A5\u64A4\u56DE\u3002\u8BF7\u5148\u67E5\u770B\u7248\u672C\u8BB0\u5F55\uFF0C\u4FDD\u7559\u540E\u7EED\u4FEE\u6539\u3002"), anchor && pending && !refining && /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-secondary", onClick: () => setRefining(true) }, "\u7EE7\u7EED\u63D0\u8981\u6C42")), running && /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-quiet", onClick: () => onAction("cancelJob", job.id) }, "\u53D6\u6D88\u672C\u6B21\u751F\u6210")), proposal && /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-sentence-review" }, pending && /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-primary", disabled: busy || editingSuggestion || outdated || job.status !== "succeeded", onClick: () => onAction("applySentence", job.id) }, /* @__PURE__ */ import_react6.default.createElement(Icon, { name: "check", size: 14 }), "\u91C7\u7528\u4FEE\u6539", job.native ? "\uFF08Ctrl+Alt+A\uFF09" : ""), output.review === "adopted" && /* @__PURE__ */ import_react6.default.createElement(import_react6.default.Fragment, null, /* @__PURE__ */ import_react6.default.createElement("span", null, /* @__PURE__ */ import_react6.default.createElement(Icon, { name: "check", size: 13 }), workingCopy ? "\u5DF2\u4FDD\u5B58\u5230\u5DE5\u4F5C\u526F\u672C" : `\u5DF2\u4FDD\u5B58 v${output.appliedRevision}`), /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-secondary", disabled: busy || undoOutdated, onClick: () => onAction("undoSentence", job.id) }, "\u64A4\u56DE\u672C\u6B21\u91C7\u7528", job.native ? "\uFF08Ctrl+Alt+Z\uFF09" : "")), output.review === "undone" && /* @__PURE__ */ import_react6.default.createElement("span", null, "\u5DF2\u64A4\u56DE \xB7 \u4FEE\u6539\u5386\u53F2\u4FDD\u7559"), pending && /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-quiet", onClick: onClose }, "\u4FDD\u7559\u539F\u6587")), /* @__PURE__ */ import_react6.default.createElement("footer", null, workingCopy ? "\u91C7\u7528\u540E\u66F4\u65B0\u540C\u4E00 Word \u5DE5\u4F5C\u526F\u672C \xB7 \u652F\u6301\u64A4\u56DE" : "\u53EA\u6709\u91C7\u7528\u540E\u624D\u66FF\u6362\u539F\u53E5 \xB7 \u6BCF\u6B21\u4FEE\u6539\u4FDD\u7559\u7248\u672C"));
 }
-function SentenceEditor({ text: text2, object, project, jobs, modelReady, onText, onRevise, onAction, onClassify, onImport, nativeRender, onNativePrepare, onRefresh, initialNativeJobId, onNativeOpen, onOpenConversation, resolveImage }) {
+function SentenceEditor({ text: text2, object, project, jobs, modelReady, onText, onRevise, onAction, onClassify, onEditSuggestion, onImport, nativeRender, onNativePrepare, onRefresh, initialNativeJobId, onNativeOpen, onOpenConversation, resolveImage }) {
   const conversations = (project.writingConversations || []).filter((thread) => thread.objectId === object.id);
   const element = import_react6.default.useRef(null), editor = import_react6.default.useRef(null), callbacks = import_react6.default.useRef({ onText });
+  const suggestionEditing = import_react6.default.useRef(false);
   callbacks.current = { onText };
   const [selection, setSelection] = import_react6.default.useState(null), [jobId, setJobId] = import_react6.default.useState(null), [notice, setNotice] = import_react6.default.useState("");
   const [error, setError] = import_react6.default.useState(""), [busy, setBusy] = import_react6.default.useState(false), [history2, setHistory] = import_react6.default.useState(false);
@@ -44358,6 +44440,10 @@ function SentenceEditor({ text: text2, object, project, jobs, modelReady, onText
     }
   };
   const act = async (action, id) => {
+    if (action === "applySentence" && suggestionEditing.current) {
+      setError("\u8BF7\u5148\u4FDD\u5B58\u6216\u53D6\u6D88\u6B63\u5728\u7F16\u8F91\u7684\u672C\u53E5\u5EFA\u8BAE\u3002");
+      return;
+    }
     try {
       setBusy(true);
       setError("");
@@ -44433,7 +44519,11 @@ function SentenceEditor({ text: text2, object, project, jobs, modelReady, onText
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   }, onPointerCancel: () => {
     floatingDrag.current = null;
-  } }, /* @__PURE__ */ import_react6.default.createElement(Icon, { name: "chat", size: 15 }), /* @__PURE__ */ import_react6.default.createElement("strong", null, "\u8BBA\u6587\u4FEE\u6539"), /* @__PURE__ */ import_react6.default.createElement("small", null, "DSH \u539F\u751F\u5BF9\u8BDD"), /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-icon-button", "aria-label": "\u6536\u8D77\u8BBA\u6587\u4FEE\u6539\u5BF9\u8BDD", onClick: () => void close3().catch((error2) => setError(error2.message)) }, /* @__PURE__ */ import_react6.default.createElement(Icon, { name: "close", size: 15 }))), /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-writing-conversation-controls" }, /* @__PURE__ */ import_react6.default.createElement("span", { title: project.rootPath }, "\u5DE5\u4F5C\u533A \xB7 ", project.title), /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-quiet", disabled: busy, onClick: () => void openConversation({ newThread: true }) }, "\u65B0\u5EFA\u5BF9\u8BDD"), conversations.length > 1 && /* @__PURE__ */ import_react6.default.createElement("select", { "aria-label": "\u5207\u6362\u8BBA\u6587\u4FEE\u6539\u5BF9\u8BDD", disabled: busy, value: job?.nativeSessionId || "", onChange: (event) => void openConversation({ sessionId: event.target.value }) }, /* @__PURE__ */ import_react6.default.createElement("option", { value: "", disabled: true }, "\u9009\u62E9\u5BF9\u8BDD"), conversations.map((thread, index) => /* @__PURE__ */ import_react6.default.createElement("option", { key: thread.sessionId, value: thread.sessionId }, "\u5BF9\u8BDD ", conversations.length - index, " \xB7 ", new Date(thread.updatedAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }))))), !job?.conversationOnly && /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-native-sentence-target" }, /* @__PURE__ */ import_react6.default.createElement("span", null, "\u5F53\u524D\u9009\u53E5"), job?.original || selection?.selectedText), /* @__PURE__ */ import_react6.default.createElement("nav", { className: "rw-native-sentence-tabs", "aria-label": "\u9009\u53E5\u4FEE\u6539\u89C6\u56FE" }, /* @__PURE__ */ import_react6.default.createElement("button", { "aria-pressed": nativeTab === "chat", onClick: () => setNativeTab("chat") }, "\u4FEE\u6539\u5BF9\u8BDD"), /* @__PURE__ */ import_react6.default.createElement("button", { "aria-pressed": nativeTab === "review", disabled: !job?.output?.proposal, onClick: () => setNativeTab("review") }, "\u4FEE\u6539\u5BF9\u7167\u4E0E\u6587\u732E\u4F9D\u636E", job?.output?.review === "pending" ? " \xB7 \u5F85\u590D\u6838" : "")), error && /* @__PURE__ */ import_react6.default.createElement("p", { role: "alert", className: "rw-sentence-warning" }, error), /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-native-sentence-columns" }, /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-native-sentence-conversation", hidden: nativeTab !== "chat" }, job ? nativeRender({ project, job, onError: setError }) : /* @__PURE__ */ import_react6.default.createElement("p", { className: "rw-native-failure" }, "\u6B63\u5728\u4FDD\u5B58\u9009\u533A\u5E76\u51C6\u5907\u539F\u751F\u4F1A\u8BDD\u2026")), job?.output?.proposal && /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-native-sentence-review", hidden: nativeTab !== "review" }, /* @__PURE__ */ import_react6.default.createElement(RevisionPanel, { job, currentRevision: object.revision, embedded: true, busy, error, modelReady: true, onAction: act, onClassify, onClose: () => setNativeTab("chat") })))) : /* @__PURE__ */ import_react6.default.createElement(RevisionPanel, { key: `${selection?.from}:${selection?.to}:${selection?.markdown || "history"}`, anchor: selection, job, currentRevision: object.revision, error, busy, modelReady, onGenerate: generate, onAction: act, onClassify, onClose: () => {
+  } }, /* @__PURE__ */ import_react6.default.createElement(Icon, { name: "chat", size: 15 }), /* @__PURE__ */ import_react6.default.createElement("strong", null, "\u8BBA\u6587\u4FEE\u6539"), /* @__PURE__ */ import_react6.default.createElement("small", null, "DSH \u539F\u751F\u5BF9\u8BDD"), /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-icon-button", "aria-label": "\u6536\u8D77\u8BBA\u6587\u4FEE\u6539\u5BF9\u8BDD", onClick: () => void close3().catch((error2) => setError(error2.message)) }, /* @__PURE__ */ import_react6.default.createElement(Icon, { name: "close", size: 15 }))), /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-writing-conversation-controls" }, /* @__PURE__ */ import_react6.default.createElement("span", { title: project.rootPath }, "\u5DE5\u4F5C\u533A \xB7 ", project.title), /* @__PURE__ */ import_react6.default.createElement("button", { className: "rw-quiet", disabled: busy, onClick: () => void openConversation({ newThread: true }) }, "\u65B0\u5EFA\u5BF9\u8BDD"), conversations.length > 1 && /* @__PURE__ */ import_react6.default.createElement("select", { "aria-label": "\u5207\u6362\u8BBA\u6587\u4FEE\u6539\u5BF9\u8BDD", disabled: busy, value: job?.nativeSessionId || "", onChange: (event) => void openConversation({ sessionId: event.target.value }) }, /* @__PURE__ */ import_react6.default.createElement("option", { value: "", disabled: true }, "\u9009\u62E9\u5BF9\u8BDD"), conversations.map((thread, index) => /* @__PURE__ */ import_react6.default.createElement("option", { key: thread.sessionId, value: thread.sessionId }, "\u5BF9\u8BDD ", conversations.length - index, " \xB7 ", new Date(thread.updatedAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }))))), !job?.conversationOnly && /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-native-sentence-target" }, /* @__PURE__ */ import_react6.default.createElement("span", null, "\u5F53\u524D\u9009\u53E5"), job?.original || selection?.selectedText), /* @__PURE__ */ import_react6.default.createElement("nav", { className: "rw-native-sentence-tabs", "aria-label": "\u9009\u53E5\u4FEE\u6539\u89C6\u56FE" }, /* @__PURE__ */ import_react6.default.createElement("button", { "aria-pressed": nativeTab === "chat", onClick: () => setNativeTab("chat") }, "\u4FEE\u6539\u5BF9\u8BDD"), /* @__PURE__ */ import_react6.default.createElement("button", { "aria-pressed": nativeTab === "review", disabled: !job?.output?.proposal, onClick: () => setNativeTab("review") }, "\u4FEE\u6539\u5BF9\u7167\u4E0E\u6587\u732E\u4F9D\u636E", job?.output?.review === "pending" ? " \xB7 \u5F85\u590D\u6838" : "")), error && /* @__PURE__ */ import_react6.default.createElement("p", { role: "alert", className: "rw-sentence-warning" }, error), /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-native-sentence-columns" }, /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-native-sentence-conversation", hidden: nativeTab !== "chat" }, job ? nativeRender({ project, job, onError: setError }) : /* @__PURE__ */ import_react6.default.createElement("p", { className: "rw-native-failure" }, "\u6B63\u5728\u4FDD\u5B58\u9009\u533A\u5E76\u51C6\u5907\u539F\u751F\u4F1A\u8BDD\u2026")), job?.output?.proposal && /* @__PURE__ */ import_react6.default.createElement("div", { className: "rw-native-sentence-review", hidden: nativeTab !== "review" }, /* @__PURE__ */ import_react6.default.createElement(RevisionPanel, { job, currentRevision: object.revision, embedded: true, busy, error, modelReady: true, onAction: act, onClassify, onEditSuggestion, onEditingChange: (value) => {
+    suggestionEditing.current = value;
+  }, onClose: () => setNativeTab("chat") })))) : /* @__PURE__ */ import_react6.default.createElement(RevisionPanel, { key: `${selection?.from}:${selection?.to}:${selection?.markdown || "history"}`, anchor: selection, job, currentRevision: object.revision, error, busy, modelReady, onGenerate: generate, onAction: act, onClassify, onEditSuggestion, onEditingChange: (value) => {
+    suggestionEditing.current = value;
+  }, onClose: () => {
     setSelection(null);
     setJobId(null);
     setError("");
@@ -44484,7 +44574,7 @@ function WorkspaceBrowser({ api: api2, project, onSelect, onRefresh, onReveal })
 }
 
 // src/client/WordEditor.jsx
-var import_react11 = __toESM(require("react"), 1);
+var import_react10 = __toESM(require("react"), 1);
 
 // src/client/WordReader.jsx
 var import_react8 = __toESM(require("react"), 1);
@@ -44822,68 +44912,227 @@ function WordWorkspaceFiles({ project, object, busy, error, onSelect, onClose, o
   } }, /* @__PURE__ */ import_react9.default.createElement("header", null, /* @__PURE__ */ import_react9.default.createElement(Icon, { name: "folder", size: 18 }), /* @__PURE__ */ import_react9.default.createElement("strong", null, "\u6253\u5F00\u6587\u7A3F"), /* @__PURE__ */ import_react9.default.createElement("button", { className: "rw-icon-button", disabled: busy, "aria-label": "\u8FD4\u56DE Word \u6B63\u6587", title: "\u8FD4\u56DE\u6B63\u6587", onClick: onClose }, /* @__PURE__ */ import_react9.default.createElement(Icon, { name: "close", size: 16 }))), /* @__PURE__ */ import_react9.default.createElement("p", null, "\u4ECE\u5F53\u524D\u9879\u76EE\u9009\u62E9\u6587\u7A3F\uFF0C\u5207\u6362\u524D\u4FDD\u5B58\u672A\u4FDD\u5B58\u7684\u4FEE\u6539\u3002"), /* @__PURE__ */ import_react9.default.createElement("input", { autoFocus: true, type: "search", "aria-label": "\u67E5\u627E\u5DE5\u4F5C\u533A Word \u6587\u4EF6", placeholder: "\u67E5\u627E\u6587\u7A3F\u540D\u79F0", value: query, disabled: busy, onChange: (event) => setQuery(event.target.value) }), error && /* @__PURE__ */ import_react9.default.createElement("p", { className: "rw-sentence-warning", role: "alert" }, error), busy && /* @__PURE__ */ import_react9.default.createElement("p", { role: "status" }, "\u6B63\u5728\u4FDD\u5B58\u5E76\u6253\u5F00\u6587\u7A3F\u2026"), /* @__PURE__ */ import_react9.default.createElement("div", { className: "rw-word-files-list" }, matches2.slice(0, 100).map((item) => /* @__PURE__ */ import_react9.default.createElement("button", { key: item.id, disabled: busy, "aria-current": item.id === object.id ? "page" : void 0, title: item.metadata?.workspaceFile || item.title, onClick: () => onSelect(item) }, /* @__PURE__ */ import_react9.default.createElement(Icon, { name: "file", size: 17 }), /* @__PURE__ */ import_react9.default.createElement("span", null, /* @__PURE__ */ import_react9.default.createElement("strong", null, item.title), /* @__PURE__ */ import_react9.default.createElement("small", null, item.metadata?.workspaceFile || "paper", " \xB7 ", item.metadata?.wordEditable ? "\u5DE5\u4F5C\u533A\u7248\u672C" : "\u539F\u7A3F")), item.id === object.id && /* @__PURE__ */ import_react9.default.createElement("small", null, "\u5F53\u524D"))), !matches2.length && /* @__PURE__ */ import_react9.default.createElement("p", null, "\u6CA1\u6709\u5339\u914D\u7684 Word \u6587\u7A3F\u3002"), matches2.length > 100 && /* @__PURE__ */ import_react9.default.createElement("p", null, "\u5339\u914D\u6587\u7A3F\u8F83\u591A\uFF0C\u8BF7\u8F93\u5165\u540D\u79F0\u7F29\u5C0F\u8303\u56F4\u3002")), /* @__PURE__ */ import_react9.default.createElement("footer", null, onBrowse && /* @__PURE__ */ import_react9.default.createElement("button", { className: "rw-secondary", disabled: busy, onClick: onBrowse }, "\u5DE5\u4F5C\u533A\u6587\u4EF6"), /* @__PURE__ */ import_react9.default.createElement("button", { className: "rw-quiet", disabled: busy, onClick: onAdvanced }, "Word \u6587\u4EF6\u529F\u80FD"), /* @__PURE__ */ import_react9.default.createElement("span", { title: project.rootPath }, project.title)));
 }
 
-// src/client/WordFormatPanel.jsx
-var import_react10 = __toESM(require("react"), 1);
-function WordFormatPanel({ api: api2, project, object, nativeRender, onSaved, onBeforeAction }) {
-  const [localJob, setLocalJob] = import_react10.default.useState(null), [busy, setBusy] = import_react10.default.useState(false), [error, setError] = import_react10.default.useState(""), [family, setFamily] = import_react10.default.useState("\u5B8B\u4F53"), [size, setSize] = import_react10.default.useState(12), [scope, setScope] = import_react10.default.useState("body");
-  const live = import_react10.default.useRef({});
-  live.current = { project, object, onSaved, onBeforeAction };
-  const jobId = project.formattingThreads?.[object.id]?.jobId || localJob, job = project.jobs?.find((item) => item.id === jobId), output = job?.output, stale = output?.review === "pending" && output.expectedRevision !== object.revision;
-  const action = async (fn) => {
-    setBusy(true);
-    setError("");
+// src/shared/word-live.mjs
+var WORD_ACTIONS = ["font", "size", "bold", "italic", "align", "line_spacing", "paragraph_spacing", "indents", "remove_extra_spaces", "remove_blank_paragraphs", "trim_leading_spaces", "undo", "redo"];
+var fontAliases2 = { "\u5B8B\u4F53": "SimSun", "\u65B0\u5B8B\u4F53": "NSimSun", "\u9ED1\u4F53": "SimHei", "\u4EFF\u5B8B": "FangSong", "\u6977\u4F53": "KaiTi", "\u5FAE\u8F6F\u96C5\u9ED1": "Microsoft YaHei" };
+function wordCommand(value) {
+  const fail = () => {
+    throw new Error("Word \u64CD\u4F5C\u6216\u53C2\u6570\u65E0\u6548\u3002");
+  };
+  if (!value || !WORD_ACTIONS.includes(value.action) || !["selection", "all"].includes(value.scope)) fail();
+  const fields = { font: ["fontFamily", "latinFontFamily"], size: ["fontSizePt"], bold: ["enabled"], italic: ["enabled"], align: ["alignment"], line_spacing: ["lineSpacing"], paragraph_spacing: ["beforePt", "afterPt"], indents: ["leftPt", "rightPt", "firstLinePt"] };
+  if (Object.keys(value).some((key) => !["action", "scope", "contextId", "reason", ...fields[value.action] || []].includes(key))) fail();
+  const number = (key, min, max) => {
+    const n = value[key];
+    if (!Number.isFinite(n) || n < min || n > max) fail();
+    return n;
+  };
+  const optional = (keys2, min, max) => {
+    const result = {};
+    for (const key of keys2) if (value[key] !== void 0) result[key] = number(key, min, max);
+    if (!Object.keys(result).length) fail();
+    return result;
+  };
+  switch (value.action) {
+    case "font": {
+      const params = {};
+      for (const [key, target] of [["fontFamily", "eastAsia"], ["latinFontFamily", "name"]]) if (value[key] !== void 0) {
+        if (typeof value[key] !== "string" || !value[key].trim() || value[key].length > 80 || /[\x00-\x1f<>]/.test(value[key])) fail();
+        const family = value[key].trim();
+        params[target] = Object.hasOwn(fontAliases2, family) ? fontAliases2[family] : family;
+      }
+      if (!Object.keys(params).length) fail();
+      return { command: "format.font", params };
+    }
+    case "size":
+      return { command: "format.size", params: { size: number("fontSizePt", 4, 96) } };
+    case "bold":
+    case "italic":
+      if (typeof value.enabled !== "boolean") fail();
+      return { command: `format.${value.action}`, params: { value: value.enabled } };
+    case "align":
+      if (!["left", "center", "right", "justify", "distribute"].includes(value.alignment)) fail();
+      return { command: "para.align", params: { value: value.alignment } };
+    case "line_spacing":
+      return { command: "para.lineSpacing", params: { value: number("lineSpacing", 0.5, 5) } };
+    case "paragraph_spacing": {
+      const n = optional(["beforePt", "afterPt"], 0, 1584);
+      return { command: "para.spacing", params: { ...n.beforePt !== void 0 ? { before: n.beforePt } : {}, ...n.afterPt !== void 0 ? { after: n.afterPt } : {} } };
+    }
+    case "indents": {
+      const n = optional(["leftPt", "rightPt", "firstLinePt"], -1584, 1584);
+      return { command: "para.indents", params: { ...n.leftPt !== void 0 ? { left: n.leftPt } : {}, ...n.rightPt !== void 0 ? { right: n.rightPt } : {}, ...n.firstLinePt !== void 0 ? { firstLine: n.firstLinePt } : {} } };
+    }
+    case "remove_extra_spaces":
+      return { command: "para.removeExtraSpaces", params: { scope: value.scope } };
+    case "remove_blank_paragraphs":
+      return { command: "para.removeBlank", params: { scope: value.scope } };
+    case "trim_leading_spaces":
+      return { command: "para.trimLeadingSpaces", params: { scope: value.scope } };
+    case "undo":
+    case "redo":
+      return { command: `edit.${value.action}`, params: {} };
+  }
+}
+
+// src/client/word-live.mjs
+var WordLiveEditor = class {
+  constructor({ bridge, save, managed, revision, dirty, loadFonts = async () => {
+  }, active = () => {
+  } }) {
+    Object.assign(this, { bridge, save, managed, revision, dirty, loadFonts, active });
+    this.context = null;
+  }
+  async run(request) {
+    this.active();
+    await this.managed();
+    this.active();
+    if (request.kind === "context") {
+      await this.save();
+      this.active();
+      const selection = await this.bridge.execute("document.selection", {}), text2 = await this.bridge.execute("document.text", {}), document3 = await this.bridge.execute("document.inspect", { text: false }), fonts = await this.bridge.execute("font.list", { all: true });
+      const contextId = crypto.randomUUID();
+      this.context = { id: contextId, revision: this.revision(), selection, document: JSON.stringify(document3) };
+      const outline = { pages: document3.pages, words: document3.words, trackChanges: document3.trackChanges, canUndo: document3.canUndo, canRedo: document3.canRedo, blocks: (document3.blocks || []).slice(0, 80).map(({ index, type, style: style2, props, rows, cols }) => ({ index, type, style: style2, props, rows, cols })) };
+      return { contextId, revision: this.revision(), selection: { ...selection, text: String(selection.text || "").slice(0, 8e3) }, text: String(text2.text || "").slice(0, 18e4), truncated: (text2.text?.length || 0) > 18e4, document: outline, availableFonts: fonts.families || [] };
+    }
+    if (request.kind !== "edit") throw Error("\u672A\u77E5 Word \u7F16\u8F91\u8BF7\u6C42\u3002");
+    const context2 = this.context;
+    this.context = null;
+    if (!context2 || context2.id !== request.contextId || context2.revision !== this.revision() || this.dirty()) throw Error("Word \u5DF2\u7F16\u8F91\u6216\u4FDD\u5B58\uFF0C\u8BF7\u91CD\u65B0\u8BFB\u53D6\u5F53\u524D\u6587\u7A3F\u3002");
+    const document2 = await this.bridge.execute("document.inspect", { text: false });
+    this.active();
+    if (JSON.stringify(document2) !== context2.document) throw Error("Word \u5185\u5BB9\u6216\u9009\u533A\u5DF2\u53D8\u5316\uFF0C\u8BF7\u91CD\u65B0\u8BFB\u53D6\u3002");
+    const plan = request.plan, { command: command2, params } = wordCommand(plan);
+    const history2 = ["undo", "redo"].includes(plan.action);
+    if (!history2 && plan.scope === "selection" && (!context2.selection.text || JSON.stringify(context2.selection.anchor) === JSON.stringify(context2.selection.focus))) throw Error("\u8BF7\u5148\u5728 Word \u4E2D\u9009\u4E2D\u9700\u8981\u4FEE\u6539\u7684\u6587\u5B57\u3002");
+    if (plan.action === "font") await this.loadFonts([params.eastAsia, params.name].filter(Boolean));
+    this.active();
+    if (!history2 && plan.scope === "all") await this.bridge.execute("select.all", { whole: true });
+    let result;
     try {
-      const saved = await live.current.onBeforeAction();
-      if (saved?.revision) live.current.object = { ...live.current.object, ...saved };
-      await fn();
-    } catch (e) {
-      setError(e.message);
+      this.active();
+      result = await this.bridge.execute(command2, params);
+    } catch (error) {
+      throw Error(`Word \u672A\u5B8C\u6210\u64CD\u4F5C\uFF1A${error.message}`);
+    }
+    try {
+      this.active();
+      await this.save();
+    } catch (error) {
+      throw Error(`Word \u4E2D\u5DF2\u6267\u884C\u64CD\u4F5C\uFF0C\u4F46\u4FDD\u5B58\u672A\u786E\u8BA4\uFF1B\u8BF7\u68C0\u67E5\u5F53\u524D\u6587\u7A3F\u53CA Git \u5386\u53F2\uFF0C\u5185\u5BB9\u4ECD\u5728\u7F16\u8F91\u5668\u65F6\u6309 Ctrl+S \u91CD\u8BD5\u4FDD\u5B58\u3002${error.message}`);
+    }
+    return { saved: true, revision: this.revision(), action: plan.action, scope: plan.scope, result };
+  }
+};
+function connectWordLive({ api: api2, owner, editor, lock, onError, onSaved }) {
+  let closed = false, timer, receipt = null;
+  const tick = async () => {
+    try {
+      if (receipt) {
+        await api2.wordControl("ack", { ...owner, ...receipt });
+        receipt = null;
+      }
+      const { request } = await api2.wordControl("poll", owner);
+      if (closed || !request) return;
+      lock(true);
+      try {
+        receipt = { id: request.id, result: await editor.run(request) };
+        if (request.kind === "edit") onSaved?.();
+      } catch (error) {
+        receipt = { id: request.id, error: error.message };
+        onError?.(error.message);
+      } finally {
+        lock(false);
+      }
+      if (!closed) {
+        await api2.wordControl("ack", { ...owner, ...receipt });
+        receipt = null;
+      }
+    } catch (error) {
+      if (!closed && error.code !== "WORD_EDITOR_OWNED") onError?.(error.message);
     } finally {
-      setBusy(false);
+      if (!closed) timer = setTimeout(tick, 650);
     }
   };
-  const connect = () => action(async () => {
-    const next = await api2.mutate("openFormattingConversation", { projectId: project.id, objectId: object.id });
-    setLocalJob(next.actionResult.jobId);
-    onSaved(next);
-  });
-  import_react10.default.useEffect(() => {
-    if (!jobId) void connect();
-  }, [project.id, object.id]);
-  const preview = (operations) => action(async () => {
-    const next = await api2.mutate("previewWordFormatting", { projectId: project.id, jobId, expectedRevision: live.current.object.revision, plan: { scope, operations } });
-    onSaved(next);
-  });
-  const apply3 = (operation) => action(async () => {
-    onSaved(await api2.mutate(operation, { projectId: project.id, jobId, proposalId: output?.proposalId }));
-  });
-  return /* @__PURE__ */ import_react10.default.createElement("section", { className: "rw-word-format-panel", "aria-label": "Word \u683C\u5F0F\u4FEE\u6539" }, /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-format-controls" }, /* @__PURE__ */ import_react10.default.createElement("p", null, "\u683C\u5F0F\u65B9\u6848\u5148\u9884\u89C8\uFF0C\u5E94\u7528\u540E\u66F4\u65B0\u5F53\u524D\u5DE5\u4F5C\u533A\u7248\u672C\u3002"), /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-format-fields" }, /* @__PURE__ */ import_react10.default.createElement("label", null, "\u8303\u56F4", /* @__PURE__ */ import_react10.default.createElement("select", { "aria-label": "\u683C\u5F0F\u4FEE\u6539\u8303\u56F4", value: scope, disabled: busy, onChange: (e) => setScope(e.target.value) }, /* @__PURE__ */ import_react10.default.createElement("option", { value: "body" }, "\u666E\u901A\u6B63\u6587"), /* @__PURE__ */ import_react10.default.createElement("option", { value: "all_text" }, "\u6B63\u6587\u3001\u6807\u9898\u4E0E\u8868\u683C"))), /* @__PURE__ */ import_react10.default.createElement("label", null, "\u5B57\u4F53", /* @__PURE__ */ import_react10.default.createElement("input", { "aria-label": "\u6B63\u6587\u5B57\u4F53", value: family, disabled: busy, maxLength: 80, onChange: (e) => setFamily(e.target.value) })), /* @__PURE__ */ import_react10.default.createElement("label", null, "\u5B57\u53F7", /* @__PURE__ */ import_react10.default.createElement("input", { "aria-label": "\u6B63\u6587\u5B57\u53F7", type: "number", min: 4, max: 96, step: 0.5, value: size, disabled: busy, onChange: (e) => setSize(Number(e.target.value)) }))), /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-format-buttons" }, /* @__PURE__ */ import_react10.default.createElement("button", { className: "rw-secondary", disabled: busy || !jobId, onClick: () => void preview([{ type: "normalize_spaces" }]) }, "\u9884\u89C8\u7A7A\u683C\u6E05\u7406"), /* @__PURE__ */ import_react10.default.createElement("button", { className: "rw-quiet", disabled: busy || !jobId || !family.trim(), onClick: () => void preview([{ type: "set_font", fontFamily: family, fontSizePt: size }]) }, "\u9884\u89C8\u5B57\u4F53\u8C03\u6574"))), error && /* @__PURE__ */ import_react10.default.createElement("p", { role: "alert", className: "rw-sentence-warning" }, error, /* @__PURE__ */ import_react10.default.createElement("button", { className: "rw-quiet", disabled: busy, onClick: () => void connect() }, "\u91CD\u65B0\u8FDE\u63A5")), output && /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-format-preview", "aria-label": "\u683C\u5F0F\u4FEE\u6539\u9884\u89C8" }, /* @__PURE__ */ import_react10.default.createElement("strong", null, output.reason || "\u683C\u5F0F\u8C03\u6574"), /* @__PURE__ */ import_react10.default.createElement("p", { role: "status" }, output.review === "adopted" ? "\u5DF2\u5E94\u7528\u5230\u5F53\u524D\u5DE5\u4F5C\u533A\u7248\u672C" : output.review === "undone" ? "\u5DF2\u64A4\u56DE\u672C\u6B21\u683C\u5F0F\u4FEE\u6539" : "\u9884\u89C8\u5C1A\u672A\u5E94\u7528"), /* @__PURE__ */ import_react10.default.createElement("p", null, "\u6E05\u7406 ", output.preview.removedSpaces, " \u4E2A\u7A7A\u683C \xB7 \u8C03\u6574 ", output.preview.formattedRuns, " \u5904\u6587\u5B57\u683C\u5F0F", output.preview.skippedParagraphs ? ` \xB7 \u8DF3\u8FC7 ${output.preview.skippedParagraphs} \u4E2A\u590D\u6742\u6BB5\u843D` : ""), output.plan.operations.filter((op2) => op2.type === "set_font").map((op2, i) => /* @__PURE__ */ import_react10.default.createElement("p", { key: i }, op2.fontFamily || "\u4FDD\u7559\u539F\u5B57\u4F53", op2.latinFontFamily ? ` / ${op2.latinFontFamily}` : "", op2.fontSizePt ? ` \xB7 ${op2.fontSizePt} \u78C5` : "")), output.preview.samples?.length > 0 && /* @__PURE__ */ import_react10.default.createElement("details", null, /* @__PURE__ */ import_react10.default.createElement("summary", null, "\u67E5\u770B\u7A7A\u683C\u6E05\u7406\u793A\u4F8B"), output.preview.samples.slice(0, 8).map((sample, i) => /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-format-sample", key: i }, /* @__PURE__ */ import_react10.default.createElement("p", null, "\u4FEE\u6539\u524D\uFF1A", sample.before), /* @__PURE__ */ import_react10.default.createElement("p", null, "\u4FEE\u6539\u540E\uFF1A", sample.after)))), stale && /* @__PURE__ */ import_react10.default.createElement("p", null, "\u6587\u7A3F\u5DF2\u6709\u66F4\u65B0\uFF0C\u8BF7\u91CD\u65B0\u751F\u6210\u683C\u5F0F\u9884\u89C8\u3002"), /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-format-buttons" }, output.review === "pending" && /* @__PURE__ */ import_react10.default.createElement("button", { className: "rw-primary", disabled: busy || stale || !output.preview.changed, onClick: () => void apply3("applyWordFormatting") }, output.preview.changed ? "\u5E94\u7528\u683C\u5F0F" : "\u5F53\u524D\u5185\u5BB9\u5DF2\u7B26\u5408"), output.review === "adopted" && /* @__PURE__ */ import_react10.default.createElement("button", { className: "rw-secondary", disabled: busy || object.revision !== output.appliedRevision, onClick: () => void apply3("undoWordFormatting") }, "\u64A4\u56DE\u683C\u5F0F\u4FEE\u6539"))), /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-format-conversation", inert: busy || void 0 }, job && nativeRender ? nativeRender({ project, job, onError: setError, selectionPending: busy }) : /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-native-failure" }, nativeRender ? "\u6B63\u5728\u8FDE\u63A5\u683C\u5F0F\u4FEE\u6539\u5BF9\u8BDD\u2026" : "\u53EF\u4F7F\u7528\u4E0A\u65B9\u683C\u5F0F\u9884\u89C8\uFF1B\u5728 DSH \u4E2D\u8FD8\u53EF\u4EE5\u901A\u8FC7\u5BF9\u8BDD\u63D0\u51FA\u683C\u5F0F\u8981\u6C42\u3002")));
+  void tick();
+  return () => {
+    closed = true;
+    clearTimeout(timer);
+    void api2.wordControl("poll", { ...owner, release: true }).catch(() => {
+    });
+  };
+}
+
+// src/shared/word-sentence-update.mjs
+function selectionWithText(selection, text2) {
+  const { anchor, focus: focus2 } = selection || {};
+  if (!anchor || !focus2 || anchor.story !== focus2.story || JSON.stringify(anchor.path) !== JSON.stringify(focus2.path)) throw Error("\u53E5\u5B50\u5FC5\u987B\u4F4D\u4E8E\u540C\u4E00\u6BB5\u843D\u3002");
+  const start = anchor.off <= focus2.off ? anchor : focus2;
+  return { anchor: { ...start }, focus: { ...start, off: start.off + new TextEncoder().encode(text2).length }, text: text2 };
+}
+
+// src/client/word-revision.mjs
+async function wordPosition(api2) {
+  return { selection: await api2.execute("document.selection", {}), view: await api2.uiInspect({}) };
+}
+async function restoreWordPosition(api2, position, selection = position?.selection) {
+  if (selection?.anchor && selection?.focus) {
+    try {
+      await api2.execute("select.range", { anchor: selection.anchor, focus: selection.focus });
+    } catch {
+    }
+  }
+  const top = position?.view?.pages?.[0]?.[1];
+  if (!Number.isFinite(top) || !api2.request) return;
+  for (let n = 0; n < 3; n++) {
+    const info = await api2.uiInspect({}), current = info.pages?.[0]?.[1], rect = info.canvasRect;
+    if (!Number.isFinite(current) || !rect || Math.abs(current - top) < 2) return;
+    await api2.request("ui.wheel", { x: rect[0] + rect[2] / 2, y: rect[1] + rect[3] / 2, dy: top - current, unit: "point" });
+  }
+}
+async function mirrorWordRevision(api2, update, position, acknowledge) {
+  const range = update.selection;
+  await api2.execute("select.range", { anchor: range.anchor, focus: range.focus });
+  const current = await api2.execute("document.selection", {});
+  if (current.text !== range.text) throw Error("\u7F16\u8F91\u5668\u4E2D\u7684\u53E5\u5B50\u4E0E\u5DF2\u4FDD\u5B58\u7248\u672C\u4E0D\u4E00\u81F4\uFF0C\u9700\u8981\u91CD\u65B0\u540C\u6B65\u3002");
+  if (range.text !== update.replacement) {
+    await api2.execute("text.insert", { text: update.replacement, raw: true });
+    const inserted = selectionWithText(range, update.replacement);
+    await api2.execute("select.range", { anchor: inserted.anchor, focus: inserted.focus });
+    const checked = await api2.execute("document.selection", {});
+    if (checked.text !== update.replacement) throw Error("\u7F16\u8F91\u5668\u66F4\u65B0\u540E\u7684\u53E5\u5B50\u4E0E\u5DF2\u4FDD\u5B58\u5EFA\u8BAE\u4E0D\u4E00\u81F4\u3002");
+    await acknowledge();
+  }
+  await restoreWordPosition(api2, position, range.text === update.replacement ? selectionWithText(range, update.replacement) : null);
 }
 
 // src/client/WordEditor.jsx
 function WordEditor({ api: api2, project, object, sentence, onSaved, registerSave, onDirty, onHistory, onSelectObject, onBrowseWorkspace, ...reader }) {
   const conversations = (project.writingConversations || []).filter((thread) => thread.objectId === object.id);
   const initialJob = (sentence.jobs || []).find((item) => item.id === sentence.initialNativeJobId && (item.output?.objectId || item.objectId) === object.id);
-  const [mode, setMode] = import_react11.default.useState("edit"), [frameHtml, setFrameHtml] = import_react11.default.useState(""), [phase, setPhase] = import_react11.default.useState("\u6B63\u5728\u52A0\u8F7D Word \u7F16\u8F91\u5668\u2026"), [error, setError] = import_react11.default.useState(""), [busy, setBusy] = import_react11.default.useState(false), [jobId, setJobId] = import_react11.default.useState(initialJob?.id || null), [tab, setTab] = import_react11.default.useState("chat"), [history2, setHistory] = import_react11.default.useState(false), [notice, setNotice] = import_react11.default.useState(""), [sidebarOpen, setSidebarOpen] = import_react11.default.useState(true), [sidebarWidth, setSidebarWidth] = import_react11.default.useState(() => Math.round(((globalThis.innerWidth || 1844) - 68) * readWordSidebarRatio())), [reviewJobId, setReviewJobId] = import_react11.default.useState(initialJob?.id || null);
-  const [reminderCount, setReminderCount] = import_react11.default.useState(0), [fonts, setFonts] = import_react11.default.useState(null), [fontsBusy, setFontsBusy] = import_react11.default.useState(false);
-  const requiredFonts = import_react11.default.useRef([]), loadMoreFonts = import_react11.default.useRef(null);
-  const pendingFont = import_react11.default.useRef(null), continueDiscussion = import_react11.default.useRef(false), sidebarBoard = import_react11.default.useRef(null);
-  const [selectionFeedback, setSelectionFeedback] = import_react11.default.useState(null);
-  const selectionFlow = import_react11.default.useRef({ read: 0, running: false, queued: null, lastKey: null, generation: 0, closed: false });
-  const discussionOperation = import_react11.default.useRef(null), [dialogBusy, setDialogBusy] = import_react11.default.useState(false);
-  const [dialogError, setDialogError] = import_react11.default.useState("");
-  const [filePicker, setFilePicker] = import_react11.default.useState(false), [fileBusy, setFileBusy] = import_react11.default.useState(false), [fileError, setFileError] = import_react11.default.useState("");
-  const fileActions = import_react11.default.useRef(null), fileOperation = import_react11.default.useRef(false);
-  const pendingWasm = import_react11.default.useRef(null), bootstrapUrl = import_react11.default.useRef(""), metrics = import_react11.default.useRef({ started: performance.now(), wasmBytes: 0, instanceId: crypto.randomUUID() }), dialogActions = import_react11.default.useRef(null);
-  const frame = import_react11.default.useRef(null), live = import_react11.default.useRef({}), bridge = import_react11.default.useRef(null), dirty = import_react11.default.useRef(false), loadedRevision = import_react11.default.useRef(object.revision), managedId = import_react11.default.useRef(null), saveOperation = import_react11.default.useRef(null), exportWaiter = import_react11.default.useRef(null), drag = import_react11.default.useRef(null), opening = import_react11.default.useRef(false);
-  const sidebarElement = import_react11.default.useRef(null), resizeFrame = import_react11.default.useRef(null);
+  const [mode, setMode] = import_react10.default.useState("edit"), [frameHtml, setFrameHtml] = import_react10.default.useState(""), [phase, setPhase] = import_react10.default.useState("\u6B63\u5728\u52A0\u8F7D Word \u7F16\u8F91\u5668\u2026"), [error, setError] = import_react10.default.useState(""), [busy, setBusy] = import_react10.default.useState(false), [jobId, setJobId] = import_react10.default.useState(initialJob?.id || null), [tab, setTab] = import_react10.default.useState("chat"), [history2, setHistory] = import_react10.default.useState(false), [notice, setNotice] = import_react10.default.useState(""), [sidebarOpen, setSidebarOpen] = import_react10.default.useState(true), [sidebarWidth, setSidebarWidth] = import_react10.default.useState(() => Math.round(((globalThis.innerWidth || 1844) - 68) * readWordSidebarRatio())), [reviewJobId, setReviewJobId] = import_react10.default.useState(initialJob?.id || null);
+  const [reminderCount, setReminderCount] = import_react10.default.useState(0), [fonts, setFonts] = import_react10.default.useState(null), [fontsBusy, setFontsBusy] = import_react10.default.useState(false);
+  const requiredFonts = import_react10.default.useRef([]), loadMoreFonts = import_react10.default.useRef(null);
+  const pendingFont = import_react10.default.useRef(null), continueDiscussion = import_react10.default.useRef(false), sidebarBoard = import_react10.default.useRef(null);
+  const [selectionFeedback, setSelectionFeedback] = import_react10.default.useState(null);
+  const selectionFlow = import_react10.default.useRef({ read: 0, running: false, queued: null, lastKey: null, generation: 0, closed: false });
+  const discussionOperation = import_react10.default.useRef(null), [dialogBusy, setDialogBusy] = import_react10.default.useState(false);
+  const [dialogError, setDialogError] = import_react10.default.useState("");
+  const [filePicker, setFilePicker] = import_react10.default.useState(false), [fileBusy, setFileBusy] = import_react10.default.useState(false), [fileError, setFileError] = import_react10.default.useState("");
+  const fileActions = import_react10.default.useRef(null), fileOperation = import_react10.default.useRef(false);
+  const pendingWasm = import_react10.default.useRef(null), bootstrapUrl = import_react10.default.useRef(""), metrics = import_react10.default.useRef({ started: performance.now(), wasmBytes: 0, instanceId: crypto.randomUUID() }), dialogActions = import_react10.default.useRef(null);
+  const frame = import_react10.default.useRef(null), live = import_react10.default.useRef({}), bridge = import_react10.default.useRef(null), dirty = import_react10.default.useRef(false), loadedRevision = import_react10.default.useRef(object.revision), managedId = import_react10.default.useRef(null), saveOperation = import_react10.default.useRef(null), exportWaiter = import_react10.default.useRef(null), drag = import_react10.default.useRef(null), opening = import_react10.default.useRef(false);
+  const sidebarElement = import_react10.default.useRef(null), resizeFrame = import_react10.default.useRef(null);
+  const liveOperation = import_react10.default.useRef(false), liveRequest = import_react10.default.useRef(null);
+  const revisionOperation = import_react10.default.useRef(null), reviewEditing = import_react10.default.useRef(false), [revisionEpoch, setRevisionEpoch] = import_react10.default.useState(0);
   const cancelResizeFrame = () => {
     if (resizeFrame.current !== null) cancelAnimationFrame(resizeFrame.current);
     resizeFrame.current = null;
   };
-  import_react11.default.useEffect(() => () => cancelResizeFrame(), []);
+  import_react10.default.useEffect(() => () => cancelResizeFrame(), []);
   live.current = { object, project, sentence, onSaved, onDirty, onSelectObject, onBrowseWorkspace };
-  import_react11.default.useEffect(() => {
+  import_react10.default.useEffect(() => {
     const element = sidebarBoard.current;
     if (!element) return;
     const observer = new ResizeObserver(() => {
@@ -44942,8 +45191,9 @@ function WordEditor({ api: api2, project, object, sentence, onSaved, registerSav
     });
   };
   const locked = (value) => {
-    if (frame.current) frame.current.inert = value;
-    setBusy(value);
+    const active = value || liveOperation.current;
+    if (frame.current) frame.current.inert = active;
+    setBusy(active);
   };
   const ensureManaged = async (supplied) => {
     const info = supplied || await bridge.current.uiInspect({});
@@ -44962,16 +45212,16 @@ function WordEditor({ api: api2, project, object, sentence, onSaved, registerSav
     setNotice(`\u5DF2\u4FDD\u5B58\u5230\u540C\u4E00 Word \u5DE5\u4F5C\u526F\u672C \xB7 \u539F\u4EF6\u4FDD\u7559`);
     return saved;
   };
-  const save = () => {
+  const save = (suppliedInfo) => {
     if (saveOperation.current) return saveOperation.current;
     const operation = (async () => {
       if (!bridge.current) {
         if (dirty.current) throw Error("Word \u5C1A\u672A\u5C31\u7EEA\uFF0C\u5F53\u524D\u5185\u5BB9\u672A\u4FDD\u5B58\u3002");
         return;
       }
-      const info = await ensureManaged();
+      const info = await ensureManaged(suppliedInfo);
       if (info.dirty) markDirty(true);
-      if (!dirty.current) return;
+      if (!dirty.current) return info;
       locked(true);
       frame.current?.contentWindow?.document.activeElement?.blur();
       try {
@@ -44993,6 +45243,7 @@ function WordEditor({ api: api2, project, object, sentence, onSaved, registerSav
             waiter?.reject(error2);
           });
         });
+        return { ...info, dirty: false };
       } finally {
         locked(false);
       }
@@ -45004,10 +45255,13 @@ function WordEditor({ api: api2, project, object, sentence, onSaved, registerSav
     });
     return operation;
   };
-  import_react11.default.useEffect(() => setJobId(initialJob?.id || null), [initialJob?.id]);
-  const saveRef = import_react11.default.useRef(save);
+  import_react10.default.useEffect(() => setJobId(initialJob?.id || null), [initialJob?.id]);
+  const saveRef = import_react10.default.useRef(save);
   saveRef.current = save;
-  import_react11.default.useEffect(() => registerSave(() => saveRef.current()), [registerSave]);
+  import_react10.default.useEffect(() => registerSave(async () => {
+    await revisionOperation.current?.done;
+    return saveRef.current();
+  }), [registerSave]);
   const openFiles = async () => {
     if (!bridge.current || busy || fileOperation.current) return;
     try {
@@ -45099,12 +45353,12 @@ function WordEditor({ api: api2, project, object, sentence, onSaved, registerSav
     return operation;
   };
   const capture = async () => {
-    if (!bridge.current || busy || opening.current || saveOperation.current || fileOperation.current) return;
+    if (!bridge.current || busy || liveOperation.current || opening.current || saveOperation.current || fileOperation.current) return;
     const flow = selectionFlow.current, read = ++flow.read, generation = flow.generation;
     const active = () => !flow.closed && generation === flow.generation;
     const keyOf = (value) => JSON.stringify([live.current.object.id, loadedRevision.current, value]);
     try {
-      const info = await bridge.current.uiInspect({});
+      const [info, selection] = await Promise.all([bridge.current.uiInspect({}), bridge.current.execute("document.selection", {})]);
       if (!active() || read !== flow.read) return;
       if (isWordOpenPage(info)) {
         await fileActions.current?.open();
@@ -45112,7 +45366,6 @@ function WordEditor({ api: api2, project, object, sentence, onSaved, registerSav
       }
       if (info.ui?.backstage || filePicker || !live.current.sentence.onNativePrepare) return;
       await ensureManaged(info);
-      const selection = await bridge.current.execute("document.selection", {});
       if (!active() || read !== flow.read || !selection.text?.trim() || selection.text.length > 8e3) return;
       if (JSON.stringify(selection.anchor) === JSON.stringify(selection.focus)) return;
       const wordSelection = { anchor: selection.anchor, focus: selection.focus, text: selection.text };
@@ -45134,9 +45387,9 @@ function WordEditor({ api: api2, project, object, sentence, onSaved, registerSav
           try {
             await discussionOperation.current;
             if (!active()) return;
-            await save();
+            await save(currentSelection === wordSelection ? info : void 0);
             if (!active()) return;
-            const id = await live.current.sentence.onNativePrepare({ wordSelection: currentSelection });
+            const id = await live.current.sentence.onNativePrepare({ wordSelection: currentSelection, wordSaved: true });
             if (!active()) return;
             if (flow.queued) continue;
             await live.current.sentence.onNativeOpen?.(id);
@@ -45161,9 +45414,9 @@ function WordEditor({ api: api2, project, object, sentence, onSaved, registerSav
       if (active()) setError(e.message);
     }
   };
-  const captureRef = import_react11.default.useRef(capture);
+  const captureRef = import_react10.default.useRef(capture);
   captureRef.current = capture;
-  const openDocument = async (cancelled, zoom = 95) => {
+  const openDocument = async (cancelled, zoom = 95, position = null) => {
     const { project: project2, object: object2 } = live.current;
     opening.current = true;
     setPhase("\u6B63\u5728\u6253\u5F00 Word \u6B63\u6587\u2026");
@@ -45184,6 +45437,7 @@ function WordEditor({ api: api2, project, object, sentence, onSaved, registerSav
           markDirty(false);
           await setWordZoom(bridge.current, zoom);
           await showWordDocument(bridge.current);
+          if (position) await restoreWordPosition(bridge.current, position);
           if (cancelled()) return;
           setPhase("");
           report("ready", info);
@@ -45199,7 +45453,7 @@ function WordEditor({ api: api2, project, object, sentence, onSaved, registerSav
       opening.current = false;
     }
   };
-  import_react11.default.useEffect(() => {
+  import_react10.default.useEffect(() => {
     if (mode !== "edit") return;
     let closed = false, detach = () => {
     }, captureTimer, moduleUrl, bootUrl;
@@ -45263,7 +45517,7 @@ function WordEditor({ api: api2, project, object, sentence, onSaved, registerSav
         const doc3 = frame.current.contentWindow.document;
         const pointer = () => {
           clearTimeout(captureTimer);
-          captureTimer = setTimeout(() => void captureRef.current(), 80);
+          captureTimer = setTimeout(() => void captureRef.current(), 32);
         };
         const keys2 = (event2) => {
           if ((event2.ctrlKey || event2.metaKey) && event2.key.toLowerCase() === "o" || event2.altKey && !event2.ctrlKey && event2.key.toLowerCase() === "f") {
@@ -45292,19 +45546,25 @@ function WordEditor({ api: api2, project, object, sentence, onSaved, registerSav
           doc3.removeEventListener("keyup", keyup);
           doc3.removeEventListener("keydown", keys2, true);
         };
-        const loadFonts = async (all = false) => {
+        const loadFonts = async (all = false, families = requiredFonts.current) => {
           setFontsBusy(true);
           try {
             const result = await api2.mutate("systemFonts", {});
             if (closed) return;
-            const selected = all ? result.actionResult : documentSystemFonts(result.actionResult, requiredFonts.current);
-            const installed = await installSystemFonts(bridge.current, selected, api2.systemFontUrl, controller.signal, (label) => all ? setNotice("\u6B63\u5728\u52A0\u8F7D\u7CFB\u7EDF\u5B57\u4F53\uFF1A" + label) : setPhase("\u6B63\u5728\u52A0\u8F7D\u6587\u6863\u5B57\u4F53\uFF1A" + label));
+            const selected = all ? result.actionResult : documentSystemFonts(result.actionResult, families);
+            const installed = await installSystemFonts(bridge.current, selected, api2.systemFontUrl, controller.signal, (label) => all ? setNotice("\u6B63\u5728\u52A0\u8F7D\u7CFB\u7EDF\u5B57\u4F53\uFF1A" + label) : families === requiredFonts.current ? setPhase("\u6B63\u5728\u52A0\u8F7D\u6587\u6863\u5B57\u4F53\uFF1A" + label) : void 0);
             if (closed) return;
             setFonts((previous) => ({ loaded: [.../* @__PURE__ */ new Set([...previous?.loaded || [], ...installed.loaded])], failed: installed.failed }));
             if (installed.failed.length) setError("\u4EE5\u4E0B\u7CFB\u7EDF\u5B57\u4F53\u672A\u52A0\u8F7D\uFF1A" + installed.failed.join("\u3001"));
             if (all) setNotice(installed.failed.length ? "\u90E8\u5206\u5B57\u4F53\u52A0\u8F7D\u5931\u8D25\uFF0C\u53EF\u91CD\u8BD5\u3002" : "\u5E38\u7528\u7CFB\u7EDF\u5B57\u4F53\u5DF2\u52A0\u8F7D\uFF0C\u53EF\u5728 Word \u5B57\u4F53\u5217\u8868\u4E2D\u9009\u62E9\u3002");
+            if (families !== requiredFonts.current) {
+              const list = await bridge.current.execute("font.list", { all: true }), available = new Set((list.families || []).map((name) => name.toLowerCase()));
+              const missing = families.filter((name) => !available.has(name.toLowerCase()));
+              if (missing.length) throw Error("\u6240\u9700\u5B57\u4F53\u5C1A\u672A\u52A0\u8F7D\uFF1A" + missing.join("\u3001"));
+            }
           } catch (e) {
             if (!closed) setError("\u7CFB\u7EDF\u5B57\u4F53\u52A0\u8F7D\u672A\u5B8C\u6210\uFF1A" + e.message);
+            if (families !== requiredFonts.current) throw e;
           } finally {
             if (!closed) setFontsBusy(false);
           }
@@ -45312,8 +45572,12 @@ function WordEditor({ api: api2, project, object, sentence, onSaved, registerSav
         loadMoreFonts.current = loadFonts;
         void (async () => {
           await loadFonts();
-          if (!closed) await setWordRibbon(bridge.current, readWordRibbon()).catch(() => {
-          });
+          if (!closed) {
+            await setWordRibbon(bridge.current, readWordRibbon()).catch(() => {
+            });
+            await bridge.current.execute("ui.animations", { value: "off" }).catch(() => {
+            });
+          }
         })().then(() => {
           if (!closed) return openDocument(cancelled);
         }).then(() => {
@@ -45332,6 +45596,11 @@ function WordEditor({ api: api2, project, object, sentence, onSaved, registerSav
       } else if (data.type === "wordcraft:save") {
         const waiter = exportWaiter.current;
         exportWaiter.current = null;
+        if (waiter?.acknowledgeOnly) {
+          markDirty(false);
+          waiter.resolve();
+          return;
+        }
         if (saveOperation.current && !waiter) {
           setError("\u4E0A\u4E00\u6B21\u4FDD\u5B58\u4ECD\u5728\u8FDB\u884C\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5\u3002");
           return;
@@ -45374,27 +45643,48 @@ function WordEditor({ api: api2, project, object, sentence, onSaved, registerSav
       live.current.onDirty(false);
     };
   }, [mode, object.id]);
-  import_react11.default.useEffect(() => {
-    if (mode !== "edit" || !bridge.current || opening.current || loadedRevision.current === object.revision) return;
+  liveRequest.current = { managed: ensureManaged, revision: () => loadedRevision.current, dirty: () => dirty.current, save: () => saveRef.current(), loadFonts: (families) => loadMoreFonts.current?.(false, families) };
+  import_react10.default.useEffect(() => {
+    if (mode !== "edit" || phase || !bridge.current || !api2.wordControl) return;
+    const currentBridge = bridge.current;
+    let connected = true;
+    const active = () => {
+      if (!connected || bridge.current !== currentBridge || live.current.object.id !== object.id || live.current.project.id !== project.id) throw Error("Word \u5DF2\u5173\u95ED\u6216\u5207\u6362\u6587\u7A3F\uFF0C\u8BF7\u91CD\u65B0\u8BFB\u53D6\u3002");
+    };
+    const editor = new WordLiveEditor({ bridge: currentBridge, active, managed: () => liveRequest.current.managed(), revision: () => liveRequest.current.revision(), dirty: () => liveRequest.current.dirty(), save: () => liveRequest.current.save(), loadFonts: (families) => liveRequest.current.loadFonts(families) });
+    const disconnect = connectWordLive({ api: api2, owner: { projectId: project.id, objectId: object.id, instanceId: metrics.current.instanceId }, editor, lock: (value) => {
+      if (!connected) return;
+      liveOperation.current = value;
+      locked(value);
+    }, onError: setError, onSaved: () => setNotice("DSH \u5DF2\u76F4\u63A5\u4FEE\u6539 Word \u5E76\u4FDD\u5B58\uFF0C\u53EF\u5728 Word \u4E2D\u64A4\u9500\u6216\u4ECE Git \u5386\u53F2\u6062\u590D\u3002") });
+    return () => {
+      connected = false;
+      liveOperation.current = false;
+      locked(false);
+      disconnect();
+    };
+  }, [mode, Boolean(phase), object.id, project.id]);
+  import_react10.default.useEffect(() => {
+    if (mode !== "edit" || !bridge.current || opening.current || revisionOperation.current || loadedRevision.current === object.revision) return;
     let cancelled = false;
     void (async () => {
       if (dirty.current) throw Error("Word \u5DF2\u5728\u5176\u4ED6\u4F4D\u7F6E\u66F4\u65B0\uFF0C\u5F53\u524D\u8F93\u5165\u4FDD\u7559\uFF0C\u8BF7\u5148\u53E6\u5B58\u526F\u672C\u3002");
       locked(true);
-      const previous = await ensureManaged();
+      const previous = await ensureManaged(), position = await wordPosition(bridge.current);
       const prepared = await api2.mutate("prepareWordEdit", { projectId: project.id, objectId: object.id });
       if (cancelled) return;
       requiredFonts.current = prepared.actionResult.fontFamilies || [];
       await loadMoreFonts.current?.();
       if (cancelled) return;
       await bridge.current.execute("file.close", {});
-      await openDocument(() => cancelled, wordZoom(previous));
+      await openDocument(() => cancelled, wordZoom(previous), position);
     })().catch((e) => setError(e.message)).finally(() => locked(false));
     return () => {
       cancelled = true;
     };
-  }, [object.revision, mode]);
-  import_react11.default.useEffect(() => {
-    if (!jobId || !sidebarOpen) return;
+  }, [object.revision, mode, revisionEpoch]);
+  import_react10.default.useEffect(() => {
+    if (!jobId || !sidebarOpen || api2.watchState) return;
     let pending = false, closed = false;
     const refresh = async () => {
       if (closed || pending || document.visibilityState === "hidden") return;
@@ -45420,20 +45710,62 @@ function WordEditor({ api: api2, project, object, sentence, onSaved, registerSav
   const jobs = sentence.jobs || [], relevant = jobs.filter((job2) => job2.type === "writing.sentence" && !job2.conversationOnly && (job2.output?.objectId || job2.objectId) === object.id), job = jobs.find((job2) => job2.id === jobId), reviewJob = jobs.find((item) => item.id === reviewJobId) || job, undoable = relevant.find((job2) => job2.output?.review === "adopted" && job2.output.appliedRevision === object.revision);
   const selectionPending = selectionFeedback?.state === "pending", selectionBlocked = selectionPending || selectionFeedback?.state === "error" || dialogBusy || fileBusy, interactionBusy = busy || selectionPending || dialogBusy || fileBusy;
   const act = async (action, id) => {
+    if (revisionOperation.current) return;
+    if (action === "applySentence" && reviewEditing.current) {
+      setError("\u8BF7\u5148\u4FDD\u5B58\u6216\u53D6\u6D88\u6B63\u5728\u7F16\u8F91\u7684\u672C\u53E5\u5EFA\u8BAE\u3002");
+      return;
+    }
+    let finish;
+    const operation = { objectId: object.id, done: new Promise((resolve) => finish = resolve) };
+    revisionOperation.current = operation;
     try {
       setError("");
-      await save();
+      const savedView = await save();
       locked(true);
-      await live.current.sentence.onAction(action, id);
+      const activeBridge = bridge.current, position = savedView?.document !== void 0 ? { view: savedView } : activeBridge ? await wordPosition(activeBridge) : null;
+      const next = await live.current.sentence.onAction(action, id, { wordSaved: true }), update = next?.actionResult?.wordUpdate;
+      if (update && activeBridge && bridge.current === activeBridge && update.objectId === live.current.object.id && update.fromRevision === loadedRevision.current) {
+        const acknowledge = () => new Promise((resolve, reject) => {
+          const timer = setTimeout(() => {
+            exportWaiter.current = null;
+            reject(Error("\u7F16\u8F91\u5668\u540C\u6B65\u8D85\u65F6\u3002"));
+          }, 3e4);
+          exportWaiter.current = { acknowledgeOnly: true, resolve: () => {
+            clearTimeout(timer);
+            resolve();
+          }, reject: (error2) => {
+            clearTimeout(timer);
+            reject(error2);
+          } };
+          void activeBridge.execute("file.save", {}).catch((error2) => {
+            const waiter = exportWaiter.current;
+            exportWaiter.current = null;
+            waiter?.reject(error2);
+          });
+        });
+        try {
+          await mirrorWordRevision(activeBridge, update, position, acknowledge);
+          loadedRevision.current = update.revision;
+          markDirty(false);
+        } catch {
+          markDirty(false);
+          await activeBridge.execute("file.close", { force: true });
+          await openDocument(() => bridge.current !== activeBridge, wordZoom(position?.view), { ...position, selection: selectionWithText(update.selection, update.replacement) });
+        }
+      }
       setReviewJobId(id);
       setSidebarOpen(true);
       setTab("review");
-      continueDiscussion.current = true;
-      setNotice(action === "applySentence" ? "\u4FEE\u6539\u5DF2\u4FDD\u5B58\u5230\u540C\u4E00 Word \u5DE5\u4F5C\u526F\u672C\uFF0C\u53EF\u5728\u53F3\u4FA7\u64A4\u56DE\u3002" : "\u5DF2\u64A4\u56DE\u5E76\u66F4\u65B0\u540C\u4E00 Word \u5DE5\u4F5C\u526F\u672C\u3002");
+      setNotice(action === "applySentence" ? "\u4FEE\u6539\u5DF2\u4FDD\u5B58\uFF0C\u6B63\u6587\u4FDD\u7559\u5728\u5F53\u524D\u6BB5\u843D\u3002" : "\u5DF2\u64A4\u56DE\u4FEE\u6539\uFF0C\u6B63\u6587\u4FDD\u7559\u5728\u5F53\u524D\u6BB5\u843D\u3002");
+      selectionFlow.current.lastKey = null;
+      setSelectionFeedback(null);
     } catch (e) {
       setError(e.message);
     } finally {
+      if (revisionOperation.current === operation) revisionOperation.current = null;
+      finish();
       locked(false);
+      setRevisionEpoch((value) => value + 1);
     }
   };
   const changeMode = async () => {
@@ -45457,7 +45789,7 @@ function WordEditor({ api: api2, project, object, sentence, onSaved, registerSav
       setError(e.message);
     }
   };
-  import_react11.default.useEffect(() => {
+  import_react10.default.useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 4e3);
     return () => clearTimeout(timer);
@@ -45482,18 +45814,19 @@ function WordEditor({ api: api2, project, object, sentence, onSaved, registerSav
     if (key === "z" && undoable) void act("undoSentence", undoable.id);
     return true;
   } };
-  import_react11.default.useEffect(() => {
+  import_react10.default.useEffect(() => {
     const keys2 = (event) => dialogActions.current?.keys(event);
     window.addEventListener("keydown", keys2, true);
     return () => window.removeEventListener("keydown", keys2, true);
   }, []);
-  return /* @__PURE__ */ import_react11.default.createElement("section", { className: "rw-word-editor", "aria-label": "Word \u6B63\u6587\u7F16\u8F91\u533A" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-word-toolbar" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-word-document-title", title: object.metadata?.workspaceFile || object.title }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "file", size: 14 }), /* @__PURE__ */ import_react11.default.createElement("strong", null, object.title), /* @__PURE__ */ import_react11.default.createElement("small", { className: "rw-document-role", "data-role": object.metadata?.wordEditable ? "workspace" : "original", title: object.metadata?.wordEditable ? "\u5728\u5F53\u524D\u5DE5\u4F5C\u533A\u7248\u672C\u6301\u7EED\u4FDD\u5B58\uFF0C\u4E0D\u518D\u53E6\u5EFA Word" : "\u539F\u7A3F\u4FDD\u7559\uFF1B\u9996\u6B21\u4FEE\u6539\u4FDD\u5B58\u4E3A\u5DE5\u4F5C\u533A\u7248\u672C" }, object.metadata?.wordEditable ? "\u5DE5\u4F5C\u533A\u7248\u672C" : "\u539F\u7A3F")), /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-icon-button", disabled: busy || fileBusy || Boolean(phase) || mode !== "edit", "aria-label": "\u6253\u5F00\u5DE5\u4F5C\u533A Word", title: "\u6253\u5F00\u5DE5\u4F5C\u533A Word\uFF08Ctrl+O\uFF09", onClick: () => void openFiles() }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "folder", size: 15 })), undoable && /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-icon-button", "aria-label": "\u64A4\u56DE\u4E0A\u6B21\u91C7\u7528", title: "\u64A4\u56DE\u4E0A\u6B21\u91C7\u7528", disabled: interactionBusy, onClick: () => void act("undoSentence", undoable.id) }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "arrow", size: 14 })), /* @__PURE__ */ import_react11.default.createElement("button", { disabled: busy || !sentence.nativeRender, className: "rw-icon-button", "aria-label": sidebarOpen ? "\u6536\u8D77 Word \u5BF9\u8BDD\u680F" : "\u5C55\u5F00 Word \u5BF9\u8BDD\u680F", title: sidebarOpen ? "\u6536\u8D77\u5BF9\u8BDD\u680F" : "\u5C55\u5F00\u5BF9\u8BDD\u680F", "aria-pressed": sidebarOpen, onClick: () => {
+  const toolbar = /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-word-toolbar" }, /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-word-document-title", title: object.metadata?.workspaceFile || object.title }, /* @__PURE__ */ import_react10.default.createElement(Icon, { name: "file", size: 14 }), /* @__PURE__ */ import_react10.default.createElement("strong", null, object.title), /* @__PURE__ */ import_react10.default.createElement("small", { className: "rw-document-role", "data-role": object.metadata?.wordEditable ? "workspace" : "original", title: object.metadata?.wordEditable ? "\u5728\u5F53\u524D\u5DE5\u4F5C\u533A\u7248\u672C\u6301\u7EED\u4FDD\u5B58\uFF0C\u4E0D\u518D\u53E6\u5EFA Word" : "\u539F\u7A3F\u4FDD\u7559\uFF1B\u9996\u6B21\u4FEE\u6539\u4FDD\u5B58\u4E3A\u5DE5\u4F5C\u533A\u7248\u672C" }, object.metadata?.wordEditable ? "\u5DE5\u4F5C\u533A\u7248\u672C" : "\u539F\u7A3F")), /* @__PURE__ */ import_react10.default.createElement("button", { className: "rw-icon-button", disabled: busy || fileBusy || Boolean(phase) || mode !== "edit", "aria-label": "\u6253\u5F00\u5DE5\u4F5C\u533A Word", title: "\u6253\u5F00\u5DE5\u4F5C\u533A Word\uFF08Ctrl+O\uFF09", onClick: () => void openFiles() }, /* @__PURE__ */ import_react10.default.createElement(Icon, { name: "folder", size: 15 })), undoable && /* @__PURE__ */ import_react10.default.createElement("button", { className: "rw-icon-button", "aria-label": "\u64A4\u56DE\u4E0A\u6B21\u91C7\u7528", title: "\u64A4\u56DE\u4E0A\u6B21\u91C7\u7528", disabled: interactionBusy, onClick: () => void act("undoSentence", undoable.id) }, /* @__PURE__ */ import_react10.default.createElement(Icon, { name: "arrow", size: 14 })), /* @__PURE__ */ import_react10.default.createElement("button", { disabled: busy || !sentence.nativeRender, className: "rw-icon-button", "aria-label": sidebarOpen ? "\u6536\u8D77 Word \u5BF9\u8BDD\u680F" : "\u5C55\u5F00 Word \u5BF9\u8BDD\u680F", title: sidebarOpen ? "\u6536\u8D77\u5BF9\u8BDD\u680F" : "\u5C55\u5F00\u5BF9\u8BDD\u680F", "aria-pressed": sidebarOpen, onClick: () => {
     if (sidebarOpen) void close3();
     else showConversation();
-  } }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "chat", size: 15 })), /* @__PURE__ */ import_react11.default.createElement(ActionMenu, { label: "Word \u6587\u6863\u64CD\u4F5C" }, object.metadata?.wordOriginalFile && /* @__PURE__ */ import_react11.default.createElement("button", { disabled: interactionBusy || Boolean(phase), onClick: () => void openOriginal() }, "\u6253\u5F00\u539F\u59CB\u6587\u7A3F"), /* @__PURE__ */ import_react11.default.createElement("button", { disabled: busy, onClick: () => {
+  } }, /* @__PURE__ */ import_react10.default.createElement(Icon, { name: "chat", size: 15 })), /* @__PURE__ */ import_react10.default.createElement(ActionMenu, { label: "Word \u6587\u6863\u64CD\u4F5C" }, object.metadata?.wordOriginalFile && /* @__PURE__ */ import_react10.default.createElement("button", { disabled: interactionBusy || Boolean(phase), onClick: () => void openOriginal() }, "\u6253\u5F00\u539F\u59CB\u6587\u7A3F"), /* @__PURE__ */ import_react10.default.createElement("button", { disabled: busy, onClick: () => {
     setSidebarOpen(true);
     setTab("history");
-  } }, "\u6587\u6863 Git \u5386\u53F2\u4E0E\u6062\u590D"), /* @__PURE__ */ import_react11.default.createElement("button", { disabled: busy, onClick: () => setNotice(fonts?.loaded?.length ? "\u5DF2\u52A0\u8F7D\uFF1A" + fonts.loaded.join("\u3001") : "\u7CFB\u7EDF\u5B57\u4F53\u5C1A\u672A\u52A0\u8F7D") }, "\u67E5\u770B\u5DF2\u52A0\u8F7D\u7CFB\u7EDF\u5B57\u4F53"), /* @__PURE__ */ import_react11.default.createElement("button", { disabled: busy || fontsBusy || Boolean(phase) || mode !== "edit", onClick: () => void loadMoreFonts.current?.(true) }, fontsBusy ? "\u6B63\u5728\u52A0\u8F7D\u5B57\u4F53\u2026" : "\u52A0\u8F7D\u66F4\u591A\u7CFB\u7EDF\u5B57\u4F53"), /* @__PURE__ */ import_react11.default.createElement("button", { onClick: () => setHistory(!history2) }, history2 ? "\u5173\u95ED\u6539\u5199\u8BB0\u5F55" : `\u6539\u5199\u8BB0\u5F55 \xB7 ${relevant.length}`), /* @__PURE__ */ import_react11.default.createElement("button", { disabled: busy, onClick: reader.onOpenNative }, "\u4F7F\u7528\u539F\u5E94\u7528\u6253\u5F00"), /* @__PURE__ */ import_react11.default.createElement("button", { disabled: busy, onClick: () => void changeMode() }, mode === "edit" ? "\u5207\u6362\u8F7B\u91CF\u9605\u8BFB" : "\u76F4\u63A5\u7F16\u8F91 Word"), /* @__PURE__ */ import_react11.default.createElement("button", { disabled: busy || mode !== "edit", onClick: () => void toggleRibbon() }, "\u5C55\u5F00\uFF0F\u6536\u8D77 Word \u529F\u80FD\u533A"))), notice && /* @__PURE__ */ import_react11.default.createElement("output", { className: "rw-word-save-notice", role: "status" }, notice), error && /* @__PURE__ */ import_react11.default.createElement("p", { className: "rw-sentence-warning", role: "alert" }, error), history2 && /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-revision-history" }, relevant.map((item) => /* @__PURE__ */ import_react11.default.createElement("button", { key: item.id, disabled: interactionBusy, onClick: () => {
+  } }, "\u6587\u6863 Git \u5386\u53F2\u4E0E\u6062\u590D"), /* @__PURE__ */ import_react10.default.createElement("button", { disabled: busy, onClick: () => setNotice(fonts?.loaded?.length ? "\u5DF2\u52A0\u8F7D\uFF1A" + fonts.loaded.join("\u3001") : "\u7CFB\u7EDF\u5B57\u4F53\u5C1A\u672A\u52A0\u8F7D") }, "\u67E5\u770B\u5DF2\u52A0\u8F7D\u7CFB\u7EDF\u5B57\u4F53"), /* @__PURE__ */ import_react10.default.createElement("button", { disabled: busy || fontsBusy || Boolean(phase) || mode !== "edit", onClick: () => void loadMoreFonts.current?.(true) }, fontsBusy ? "\u6B63\u5728\u52A0\u8F7D\u5B57\u4F53\u2026" : "\u52A0\u8F7D\u66F4\u591A\u7CFB\u7EDF\u5B57\u4F53"), /* @__PURE__ */ import_react10.default.createElement("button", { onClick: () => setHistory(!history2) }, history2 ? "\u5173\u95ED\u6539\u5199\u8BB0\u5F55" : `\u6539\u5199\u8BB0\u5F55 \xB7 ${relevant.length}`), /* @__PURE__ */ import_react10.default.createElement("button", { disabled: busy, onClick: reader.onOpenNative }, "\u4F7F\u7528\u539F\u5E94\u7528\u6253\u5F00"), /* @__PURE__ */ import_react10.default.createElement("button", { disabled: busy, onClick: () => void changeMode() }, mode === "edit" ? "\u5207\u6362\u8F7B\u91CF\u9605\u8BFB" : "\u76F4\u63A5\u7F16\u8F91 Word"), /* @__PURE__ */ import_react10.default.createElement("button", { disabled: busy || mode !== "edit", onClick: () => void toggleRibbon() }, "\u5C55\u5F00\uFF0F\u6536\u8D77 Word \u529F\u80FD\u533A")));
+  return /* @__PURE__ */ import_react10.default.createElement("section", { className: "rw-word-editor", "aria-label": "Word \u6B63\u6587\u7F16\u8F91\u533A" }, notice && /* @__PURE__ */ import_react10.default.createElement("output", { className: "rw-word-save-notice", role: "status" }, notice), error && /* @__PURE__ */ import_react10.default.createElement("p", { className: "rw-sentence-warning", role: "alert" }, error), history2 && /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-revision-history" }, relevant.map((item) => /* @__PURE__ */ import_react10.default.createElement("button", { key: item.id, disabled: interactionBusy, onClick: () => {
     selectionFlow.current.lastKey = null;
     setSelectionFeedback(null);
     setJobId(item.id);
@@ -45502,12 +45835,12 @@ function WordEditor({ api: api2, project, object, sentence, onSaved, registerSav
     setTab("review");
     setHistory(false);
     void sentence.onNativeOpen?.(item.id);
-  } }, item.original?.slice(0, 60), /* @__PURE__ */ import_react11.default.createElement("small", null, item.phase)))), /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-word-layout", ref: sidebarBoard }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-word-document" }, filePicker && /* @__PURE__ */ import_react11.default.createElement(WordWorkspaceFiles, { project, object, busy: fileBusy, error: fileError, onSelect: (item) => void selectFile(item), onClose: () => setFilePicker(false), onBrowse: onBrowseWorkspace ? () => {
+  } }, item.original?.slice(0, 60), /* @__PURE__ */ import_react10.default.createElement("small", null, item.phase)))), /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-word-layout", ref: sidebarBoard }, /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-word-document" }, toolbar, filePicker && /* @__PURE__ */ import_react10.default.createElement(WordWorkspaceFiles, { project, object, busy: fileBusy, error: fileError, onSelect: (item) => void selectFile(item), onClose: () => setFilePicker(false), onBrowse: onBrowseWorkspace ? () => {
     setFilePicker(false);
     onBrowseWorkspace();
   } : null, onAdvanced: () => {
     void bridge.current.execute("ui.backstage", { value: true, page: "info" }).then(() => setFilePicker(false)).catch((e) => setFileError(e.message));
-  } }), mode === "edit" ? /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-word-frame-wrap", inert: filePicker || void 0 }, (phase || busy) && /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-word-loading", role: "status" }, busy ? "\u6B63\u5728\u4FDD\u5B58\u6216\u66F4\u65B0 Word\u2026" : phase), /* @__PURE__ */ import_react11.default.createElement("iframe", { ref: frame, srcDoc: frameHtml || void 0, onLoad: () => {
+  } }), mode === "edit" ? /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-word-frame-wrap", inert: filePicker || void 0 }, busy && revisionOperation.current && /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-word-update-status", role: "status" }, "\u6B63\u5728\u4FDD\u5B58\u4FEE\u6539\u2026"), (phase || busy && !revisionOperation.current) && /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-word-loading", role: "status" }, busy ? "\u6B63\u5728\u4FDD\u5B58\u6216\u66F4\u65B0 Word\u2026" : phase), /* @__PURE__ */ import_react10.default.createElement("iframe", { ref: frame, srcDoc: frameHtml || void 0, onLoad: () => {
     if (frameHtml && bootstrapUrl.current) {
       const doc3 = frame.current.contentDocument, script2 = doc3.createElement("script");
       script2.src = bootstrapUrl.current;
@@ -45528,7 +45861,7 @@ function WordEditor({ api: api2, project, object, sentence, onSaved, registerSav
       doc3.body.appendChild(script2);
       setPhase("\u6B63\u5728\u542F\u52A8 Word \u56FE\u5F62\u5F15\u64CE\u2026");
     }
-  }, title: "Wordcraft \u8BBA\u6587\u7F16\u8F91\u5668", className: "rw-word-frame" })) : /* @__PURE__ */ import_react11.default.createElement(WordReader, { api: api2, project, object, ...reader })), /* @__PURE__ */ import_react11.default.createElement(
+  }, title: "Wordcraft \u8BBA\u6587\u7F16\u8F91\u5668", className: "rw-word-frame" })) : /* @__PURE__ */ import_react10.default.createElement(WordReader, { api: api2, project, object, ...reader })), /* @__PURE__ */ import_react10.default.createElement(
     "div",
     {
       className: "rw-word-sidebar-resizer",
@@ -45565,12 +45898,14 @@ function WordEditor({ api: api2, project, object, sentence, onSaved, registerSav
       onPointerCancel: (event) => finishResize(event, true),
       onLostPointerCapture: (event) => finishResize(event, true)
     }
-  ), /* @__PURE__ */ import_react11.default.createElement("aside", { ref: sidebarElement, className: "rw-word-sidebar", hidden: !sidebarOpen, "aria-label": "Word \u53F3\u4FA7\u539F\u751F\u4FEE\u6539\u5BF9\u8BDD", style: { width: sidebarWidth } }, /* @__PURE__ */ import_react11.default.createElement("header", { title: `DSH \u539F\u751F\u5BF9\u8BDD \xB7 ${project.title}` }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "chat", size: 14 }), /* @__PURE__ */ import_react11.default.createElement("strong", null, "\u8BBA\u6587\u4FEE\u6539"), /* @__PURE__ */ import_react11.default.createElement("nav", { className: "rw-native-sentence-tabs", "aria-label": "Word \u4FEE\u6539\u89C6\u56FE" }, /* @__PURE__ */ import_react11.default.createElement("button", { "aria-label": "\u4FEE\u6539\u5BF9\u8BDD", "aria-pressed": tab === "chat", onClick: () => setTab("chat") }, "\u5BF9\u8BDD"), /* @__PURE__ */ import_react11.default.createElement("button", { "aria-label": "\u5DE6\u53F3\u5BF9\u7167\u4E0E\u6587\u732E\u4F9D\u636E", title: "\u5DE6\u53F3\u5BF9\u7167\u4E0E\u6587\u732E\u4F9D\u636E", "aria-pressed": tab === "review", disabled: !reviewJob?.output?.proposal, onClick: () => setTab("review") }, "\u5BF9\u7167", reviewJob?.output?.review === "pending" ? " \xB7" : ""), /* @__PURE__ */ import_react11.default.createElement("button", { "aria-label": "\u683C\u5F0F\u4FEE\u6539\u5BF9\u8BDD", "aria-pressed": tab === "format", onClick: () => setTab("format") }, "\u683C\u5F0F"), /* @__PURE__ */ import_react11.default.createElement("button", { "aria-pressed": tab === "history", onClick: () => setTab("history") }, "\u5386\u53F2"), /* @__PURE__ */ import_react11.default.createElement("button", { "aria-pressed": tab === "related", onClick: () => setTab("related") }, "\u5173\u8054", reminderCount ? ` \xB7 ${reminderCount}` : "")), /* @__PURE__ */ import_react11.default.createElement(ActionMenu, { label: "\u8BBA\u6587\u5BF9\u8BDD\u64CD\u4F5C" }, /* @__PURE__ */ import_react11.default.createElement("p", { className: "rw-menu-context", title: project.rootPath }, project.title), /* @__PURE__ */ import_react11.default.createElement("p", { className: "rw-menu-context" }, object.metadata?.wordEditable ? "\u5DE5\u4F5C\u533A\u7248\u672C" : "\u539F\u7A3F", " \xB7 ", object.title), /* @__PURE__ */ import_react11.default.createElement("button", { disabled: interactionBusy, onClick: () => void openConversation() }, "\u8BA8\u8BBA\u5168\u6587"), /* @__PURE__ */ import_react11.default.createElement("button", { disabled: interactionBusy, onClick: () => void openConversation({ newThread: true }) }, "\u65B0\u5EFA\u5BF9\u8BDD"), conversations.length > 1 && /* @__PURE__ */ import_react11.default.createElement("label", null, "\u5F53\u524D\u6587\u7A3F\u7684\u5BF9\u8BDD", /* @__PURE__ */ import_react11.default.createElement("select", { "aria-label": "\u5207\u6362\u8BBA\u6587\u4FEE\u6539\u5BF9\u8BDD", disabled: interactionBusy, value: job?.nativeSessionId || "", onChange: (event) => {
+  ), /* @__PURE__ */ import_react10.default.createElement("aside", { ref: sidebarElement, className: "rw-word-sidebar", hidden: !sidebarOpen, "aria-label": "Word \u53F3\u4FA7\u539F\u751F\u4FEE\u6539\u5BF9\u8BDD", style: { width: sidebarWidth } }, /* @__PURE__ */ import_react10.default.createElement("header", { title: `DSH \u539F\u751F\u5BF9\u8BDD \xB7 ${project.title}` }, /* @__PURE__ */ import_react10.default.createElement(Icon, { name: "chat", size: 14 }), /* @__PURE__ */ import_react10.default.createElement("strong", null, "\u8BBA\u6587\u4FEE\u6539"), /* @__PURE__ */ import_react10.default.createElement("nav", { className: "rw-native-sentence-tabs", "aria-label": "Word \u4FEE\u6539\u89C6\u56FE" }, /* @__PURE__ */ import_react10.default.createElement("button", { "aria-label": "\u4FEE\u6539\u5BF9\u8BDD", "aria-pressed": tab === "chat", onClick: () => setTab("chat") }, "\u5BF9\u8BDD"), /* @__PURE__ */ import_react10.default.createElement("button", { "aria-label": "\u5DE6\u53F3\u5BF9\u7167\u4E0E\u6587\u732E\u4F9D\u636E", title: "\u5DE6\u53F3\u5BF9\u7167\u4E0E\u6587\u732E\u4F9D\u636E", "aria-pressed": tab === "review", disabled: !reviewJob?.output?.proposal, onClick: () => setTab("review") }, "\u5BF9\u7167", reviewJob?.output?.review === "pending" ? " \xB7" : ""), /* @__PURE__ */ import_react10.default.createElement("button", { "aria-pressed": tab === "history", onClick: () => setTab("history") }, "\u5386\u53F2"), /* @__PURE__ */ import_react10.default.createElement("button", { "aria-pressed": tab === "related", onClick: () => setTab("related") }, "\u5173\u8054", reminderCount ? ` \xB7 ${reminderCount}` : "")), /* @__PURE__ */ import_react10.default.createElement(ActionMenu, { label: "\u8BBA\u6587\u5BF9\u8BDD\u64CD\u4F5C" }, /* @__PURE__ */ import_react10.default.createElement("p", { className: "rw-menu-context", title: project.rootPath }, project.title), /* @__PURE__ */ import_react10.default.createElement("p", { className: "rw-menu-context" }, object.metadata?.wordEditable ? "\u5DE5\u4F5C\u533A\u7248\u672C" : "\u539F\u7A3F", " \xB7 ", object.title), /* @__PURE__ */ import_react10.default.createElement("button", { disabled: interactionBusy, onClick: () => void openConversation() }, "\u8BA8\u8BBA\u5168\u6587"), /* @__PURE__ */ import_react10.default.createElement("button", { disabled: interactionBusy, onClick: () => void openConversation({ newThread: true }) }, "\u65B0\u5EFA\u5BF9\u8BDD"), conversations.length > 1 && /* @__PURE__ */ import_react10.default.createElement("label", null, "\u5F53\u524D\u6587\u7A3F\u7684\u5BF9\u8BDD", /* @__PURE__ */ import_react10.default.createElement("select", { "aria-label": "\u5207\u6362\u8BBA\u6587\u4FEE\u6539\u5BF9\u8BDD", disabled: interactionBusy, value: job?.nativeSessionId || "", onChange: (event) => {
     event.currentTarget.closest("details").open = false;
     void openConversation({ sessionId: event.target.value });
-  } }, /* @__PURE__ */ import_react11.default.createElement("option", { value: "", disabled: true }, "\u9009\u62E9\u5BF9\u8BDD"), conversations.map((thread, i) => /* @__PURE__ */ import_react11.default.createElement("option", { key: thread.sessionId, value: thread.sessionId }, "\u5BF9\u8BDD ", conversations.length - i))))), /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-icon-button", "aria-label": "\u6536\u8D77 Word \u5BF9\u8BDD\u680F", title: "\u6536\u8D77\u5BF9\u8BDD\u680F", onClick: () => void close3() }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "close", size: 13 }))), /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-word-conversation-document", title: `\u8BBA\u6587\u5DE5\u4F5C\u533A\uFF1A${project.rootPath}
+  } }, /* @__PURE__ */ import_react10.default.createElement("option", { value: "", disabled: true }, "\u9009\u62E9\u5BF9\u8BDD"), conversations.map((thread, i) => /* @__PURE__ */ import_react10.default.createElement("option", { key: thread.sessionId, value: thread.sessionId }, "\u5BF9\u8BDD ", conversations.length - i))))), /* @__PURE__ */ import_react10.default.createElement("button", { className: "rw-icon-button", "aria-label": "\u6536\u8D77 Word \u5BF9\u8BDD\u680F", title: "\u6536\u8D77\u5BF9\u8BDD\u680F", onClick: () => void close3() }, /* @__PURE__ */ import_react10.default.createElement(Icon, { name: "close", size: 13 }))), /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-word-conversation-document", title: `\u8BBA\u6587\u5DE5\u4F5C\u533A\uFF1A${project.rootPath}
 \u5F53\u524D\u6587\u7A3F\uFF1A${object.metadata?.workspaceFile || object.title}
-\u539F\u751F\u5BF9\u8BDD\uFF1A${(tab === "format" ? project.jobs?.find((item) => item.id === project.formattingThreads?.[object.id]?.jobId)?.nativeSessionId : job?.nativeSessionId) || "\u6B63\u5728\u5173\u8054"}` }, /* @__PURE__ */ import_react11.default.createElement("span", { className: "rw-document-role", "data-role": object.metadata?.wordEditable ? "workspace" : "original" }, object.metadata?.wordEditable ? "\u5DE5\u4F5C\u533A\u7248\u672C" : "\u539F\u7A3F"), /* @__PURE__ */ import_react11.default.createElement("span", null, object.title)), tab === "format" && /* @__PURE__ */ import_react11.default.createElement(WordFormatPanel, { key: object.id, api: api2, project, object, nativeRender: sentence.nativeRender, onSaved, onBeforeAction: () => saveRef.current() }), dialogError && /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-word-connection-status", role: "status" }, /* @__PURE__ */ import_react11.default.createElement("span", null, dialogError), job && /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-quiet", disabled: dialogBusy, onClick: () => void openConversation() }, "\u91CD\u65B0\u8FDE\u63A5")), (selectionFeedback || job && !job.conversationOnly) && /* @__PURE__ */ import_react11.default.createElement("details", { className: "rw-native-sentence-target rw-word-target" }, /* @__PURE__ */ import_react11.default.createElement("summary", { title: selectionFeedback?.text || job.original }, /* @__PURE__ */ import_react11.default.createElement("span", null, "\u9009\u53E5"), /* @__PURE__ */ import_react11.default.createElement("em", null, selectionFeedback?.text || job.original)), /* @__PURE__ */ import_react11.default.createElement("blockquote", null, selectionFeedback?.text || job.original)), selectionFeedback && /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-word-selection-status", "data-state": selectionFeedback.state, role: "status", "aria-live": "polite" }, selectionPending ? "\u6B63\u5728\u5173\u8054\u5230\u5F53\u524D\u5BF9\u8BDD\u2026" : selectionFeedback.state === "error" ? selectionFeedback.error : "\u5DF2\u5173\u8054\u5F53\u524D\u9009\u53E5 \xB7 \u53EF\u5728\u4E0B\u65B9\u63D0\u51FA\u4FEE\u6539\u8981\u6C42", selectionFeedback.state === "error" && /* @__PURE__ */ import_react11.default.createElement("button", { onClick: () => void captureRef.current() }, "\u91CD\u8BD5")), dialogBusy && !selectionFeedback && /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-word-selection-status", role: "status" }, "\u6B63\u5728\u6253\u5F00\u8BBA\u6587\u5BF9\u8BDD\u2026"), /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-native-sentence-columns", hidden: tab === "format" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-native-sentence-conversation", "aria-busy": selectionPending, inert: selectionBlocked || void 0, hidden: tab !== "chat" }, job ? sentence.nativeRender?.({ project, job, selectionPending: selectionBlocked, autoSelectionDraft: selectionFeedback?.state === "ready" && selectionFeedback.jobId === job.id, onError: setDialogError }) : /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-word-sidebar-empty" }, /* @__PURE__ */ import_react11.default.createElement("p", null, "\u9009\u4E2D Word \u4E2D\u7684\u4E00\u53E5\u8BDD\u63D0\u51FA\u4FEE\u6539\u8981\u6C42\uFF0C\u6216\u56F4\u7ED5\u5168\u6587\u7EE7\u7EED\u8BA8\u8BBA\u3002"), /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-secondary", disabled: interactionBusy || !sentence.nativeRender || Boolean(phase), onClick: () => void openConversation() }, dialogError ? "\u91CD\u65B0\u8FDE\u63A5" : "\u6253\u5F00\u539F\u751F\u5BF9\u8BDD"))), reviewJob?.output?.proposal && /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-native-sentence-review", hidden: tab !== "review" }, /* @__PURE__ */ import_react11.default.createElement(RevisionPanel, { job: reviewJob, workingCopy: true, currentRevision: object.revision, embedded: true, busy: busy || selectionBlocked, error, modelReady: true, onAction: act, onClassify: sentence.onClassify, onClose: () => setTab("chat") })), tab === "history" && /* @__PURE__ */ import_react11.default.createElement(DocumentHistory, { api: api2, project, object, onRestore: restore }), /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-related-container", hidden: tab !== "related" }, !phase && /* @__PURE__ */ import_react11.default.createElement(RelatedReminders, { api: api2, project, object, onLocate: locate, onCount: setReminderCount }))))));
+\u539F\u751F\u5BF9\u8BDD\uFF1A${job?.nativeSessionId || "\u6B63\u5728\u5173\u8054"}` }, /* @__PURE__ */ import_react10.default.createElement("span", { className: "rw-document-role", "data-role": object.metadata?.wordEditable ? "workspace" : "original" }, object.metadata?.wordEditable ? "\u5DE5\u4F5C\u533A\u7248\u672C" : "\u539F\u7A3F"), /* @__PURE__ */ import_react10.default.createElement("span", null, object.title)), dialogError && /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-word-connection-status", role: "status" }, /* @__PURE__ */ import_react10.default.createElement("span", null, dialogError), job && /* @__PURE__ */ import_react10.default.createElement("button", { className: "rw-quiet", disabled: dialogBusy, onClick: () => void openConversation() }, "\u91CD\u65B0\u8FDE\u63A5")), (selectionFeedback || job && !job.conversationOnly) && /* @__PURE__ */ import_react10.default.createElement("details", { className: "rw-native-sentence-target rw-word-target" }, /* @__PURE__ */ import_react10.default.createElement("summary", { title: selectionFeedback?.text || job.original }, /* @__PURE__ */ import_react10.default.createElement("span", null, "\u9009\u53E5"), /* @__PURE__ */ import_react10.default.createElement("em", null, selectionFeedback?.text || job.original)), /* @__PURE__ */ import_react10.default.createElement("blockquote", null, selectionFeedback?.text || job.original)), selectionFeedback && /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-word-selection-status", "data-state": selectionFeedback.state, role: "status", "aria-live": "polite" }, selectionPending ? "\u6B63\u5728\u5173\u8054\u5230\u5F53\u524D\u5BF9\u8BDD\u2026" : selectionFeedback.state === "error" ? selectionFeedback.error : "\u5DF2\u5173\u8054\u5F53\u524D\u9009\u53E5 \xB7 \u53EF\u5728\u4E0B\u65B9\u63D0\u51FA\u4FEE\u6539\u8981\u6C42", selectionFeedback.state === "error" && /* @__PURE__ */ import_react10.default.createElement("button", { onClick: () => void captureRef.current() }, "\u91CD\u8BD5")), dialogBusy && !selectionFeedback && /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-word-selection-status", role: "status" }, "\u6B63\u5728\u6253\u5F00\u8BBA\u6587\u5BF9\u8BDD\u2026"), /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-native-sentence-columns" }, /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-native-sentence-conversation", "aria-busy": selectionPending, inert: selectionBlocked || void 0, hidden: tab !== "chat" }, job ? sentence.nativeRender?.({ project, job, selectionPending: selectionBlocked, autoSelectionDraft: selectionFeedback?.state === "ready" && selectionFeedback.jobId === job.id, onError: setDialogError }) : /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-word-sidebar-empty" }, /* @__PURE__ */ import_react10.default.createElement("p", null, "\u53EF\u76F4\u63A5\u8BF4\u201C\u628A\u9009\u4E2D\u6587\u5B57\u6539\u4E3A\u5B8B\u4F53\u201D\u6216\u201C\u5220\u9664\u5168\u6587\u7A7A\u6BB5\u843D\u201D\uFF0C\u4E5F\u53EF\u4EE5\u9009\u53E5\u6DA6\u8272\u3001\u8BA8\u8BBA\u5168\u6587\u3002"), /* @__PURE__ */ import_react10.default.createElement("button", { className: "rw-secondary", disabled: interactionBusy || !sentence.nativeRender || Boolean(phase), onClick: () => void openConversation() }, dialogError ? "\u91CD\u65B0\u8FDE\u63A5" : "\u6253\u5F00\u539F\u751F\u5BF9\u8BDD"))), reviewJob?.output?.proposal && /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-native-sentence-review", hidden: tab !== "review" }, /* @__PURE__ */ import_react10.default.createElement(RevisionPanel, { job: reviewJob, workingCopy: true, currentRevision: object.revision, embedded: true, busy: busy || selectionBlocked, error, modelReady: true, onAction: act, onClassify: sentence.onClassify, onEditSuggestion: sentence.onEditSuggestion, onEditingChange: (value) => {
+    reviewEditing.current = value;
+  }, onClose: () => setTab("chat") })), tab === "history" && /* @__PURE__ */ import_react10.default.createElement(DocumentHistory, { api: api2, project, object, onRestore: restore }), /* @__PURE__ */ import_react10.default.createElement("div", { className: "rw-related-container", hidden: tab !== "related" }, !phase && tab === "related" && /* @__PURE__ */ import_react10.default.createElement(RelatedReminders, { api: api2, project, object, onLocate: locate, onCount: setReminderCount }))))));
 }
 
 // src/client/App.jsx
@@ -45580,38 +45915,38 @@ var date = (value) => value ? new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia
 var paneNames = { main: "\u5DE5\u4F5C\u533A", context: "\u9879\u76EE\u8D44\u6599", chat: "DSH \u539F\u751F\u5BF9\u8BDD" };
 var RECOVERY_KEY = "dsh-research-workbench:pending-drafts:v1";
 var layoutEvent = (kind, event) => ({ id: crypto.randomUUID(), kind, trusted: event.isTrusted === true });
-var workbenchStyles = workbench_default + native_theme_default + compact_layout_default + revision_tools_default + refined_workbench_default;
+var workbenchStyles = workbench_default + native_theme_default + compact_layout_default + revision_tools_default + refined_workbench_default + glass_workbench_default;
 function Modal({ title, onClose, children, footer }) {
-  const ref = import_react12.default.useRef(null);
-  import_react12.default.useEffect(() => {
+  const ref = import_react11.default.useRef(null);
+  import_react11.default.useEffect(() => {
     const dialog = ref.current;
     dialog.showModal();
     return () => dialog.close();
   }, []);
-  return /* @__PURE__ */ import_react12.default.createElement("dialog", { ref, className: "rw-modal", "aria-label": title, onCancel: (event) => {
+  return /* @__PURE__ */ import_react11.default.createElement("dialog", { ref, className: "rw-modal", "aria-label": title, onCancel: (event) => {
     event.preventDefault();
     onClose();
-  } }, /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-modal-head" }, /* @__PURE__ */ import_react12.default.createElement("h2", null, title), /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-icon-button", "aria-label": "\u5173\u95ED\u5F39\u7A97", onClick: onClose }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "close" }))), /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-modal-body" }, children), footer && /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-modal-footer" }, footer));
+  } }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-modal-head" }, /* @__PURE__ */ import_react11.default.createElement("h2", null, title), /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-icon-button", "aria-label": "\u5173\u95ED\u5F39\u7A97", onClick: onClose }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "close" }))), /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-modal-body" }, children), footer && /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-modal-footer" }, footer));
 }
 function Markdown2({ text: text2 }) {
   const blocks = text2.split(/\n\s*\n/);
   return blocks.map((block, index) => {
-    if (/^### /.test(block)) return /* @__PURE__ */ import_react12.default.createElement("h3", { key: index }, block.slice(4));
-    if (/^## /.test(block)) return /* @__PURE__ */ import_react12.default.createElement("h2", { key: index }, block.slice(3));
-    if (/^# /.test(block)) return /* @__PURE__ */ import_react12.default.createElement("h1", { key: index }, block.slice(2));
-    if (/^---+$/.test(block.trim())) return /* @__PURE__ */ import_react12.default.createElement("hr", { key: index });
-    if (/^[-*] /.test(block)) return /* @__PURE__ */ import_react12.default.createElement("ul", { key: index }, block.split("\n").map((line, n) => /* @__PURE__ */ import_react12.default.createElement("li", { key: n }, line.replace(/^[-*] /, ""))));
-    return /* @__PURE__ */ import_react12.default.createElement("p", { key: index, style: { whiteSpace: "pre-wrap" } }, block);
+    if (/^### /.test(block)) return /* @__PURE__ */ import_react11.default.createElement("h3", { key: index }, block.slice(4));
+    if (/^## /.test(block)) return /* @__PURE__ */ import_react11.default.createElement("h2", { key: index }, block.slice(3));
+    if (/^# /.test(block)) return /* @__PURE__ */ import_react11.default.createElement("h1", { key: index }, block.slice(2));
+    if (/^---+$/.test(block.trim())) return /* @__PURE__ */ import_react11.default.createElement("hr", { key: index });
+    if (/^[-*] /.test(block)) return /* @__PURE__ */ import_react11.default.createElement("ul", { key: index }, block.split("\n").map((line, n) => /* @__PURE__ */ import_react11.default.createElement("li", { key: n }, line.replace(/^[-*] /, ""))));
+    return /* @__PURE__ */ import_react11.default.createElement("p", { key: index, style: { whiteSpace: "pre-wrap" } }, block);
   });
 }
 function Splitter({ left, right, layout, board, onChange, onCommit, onResizing }) {
-  const drag = import_react12.default.useRef(null);
-  const pendingFrame = import_react12.default.useRef(null);
+  const drag = import_react11.default.useRef(null);
+  const pendingFrame = import_react11.default.useRef(null);
   const cancelFrame = () => {
     if (pendingFrame.current !== null) cancelAnimationFrame(pendingFrame.current);
     pendingFrame.current = null;
   };
-  import_react12.default.useEffect(() => () => {
+  import_react11.default.useEffect(() => () => {
     cancelFrame();
   }, []);
   const preview = (value) => {
@@ -45627,7 +45962,7 @@ function Splitter({ left, right, layout, board, onChange, onCommit, onResizing }
     const result = { ...layout, weights: { ...base2, [left]: next, [right]: total - next } };
     return result;
   };
-  return /* @__PURE__ */ import_react12.default.createElement(
+  return /* @__PURE__ */ import_react11.default.createElement(
     "div",
     {
       className: "rw-splitter",
@@ -45686,12 +46021,12 @@ function Splitter({ left, right, layout, board, onChange, onCommit, onResizing }
   );
 }
 function Dock({ task, layout, onLayout, children }) {
-  const board = import_react12.default.useRef(null);
-  const [live, setLive] = import_react12.default.useState(layout);
-  const [resizing, setResizing] = import_react12.default.useState(false);
-  const [drop, setDrop] = import_react12.default.useState(null);
-  const dragged = import_react12.default.useRef(null);
-  import_react12.default.useEffect(() => {
+  const board = import_react11.default.useRef(null);
+  const [live, setLive] = import_react11.default.useState(layout);
+  const [resizing, setResizing] = import_react11.default.useState(false);
+  const [drop, setDrop] = import_react11.default.useState(null);
+  const dragged = import_react11.default.useRef(null);
+  import_react11.default.useEffect(() => {
     setLive(layout);
   }, [layout]);
   const commit = (value, event) => {
@@ -45711,7 +46046,7 @@ function Dock({ task, layout, onLayout, children }) {
   for (const key of live.order) {
     if (task === "writing" && key === "chat") continue;
     const visible = shown.includes(key);
-    nodes.push(/* @__PURE__ */ import_react12.default.createElement(
+    nodes.push(/* @__PURE__ */ import_react11.default.createElement(
       "section",
       {
         key,
@@ -45734,45 +46069,45 @@ function Dock({ task, layout, onLayout, children }) {
           setDrop(null);
         }
       },
-      /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-pane-head", onDoubleClick: (event) => {
+      /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-pane-head", onDoubleClick: (event) => {
         if (event.target.closest("button,select")) return;
         commit({ ...live, maximized: live.maximized === key ? null : key });
-      } }, /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-drag", draggable: !live.maximized, "aria-label": `\u62D6\u52A8${paneNames[key]}\u6362\u4F4D`, title: "\u62D6\u52A8\u6362\u4F4D", onDragStart: (event) => {
+      } }, /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-drag", draggable: !live.maximized, "aria-label": `\u62D6\u52A8${paneNames[key]}\u6362\u4F4D`, title: "\u62D6\u52A8\u6362\u4F4D", onDragStart: (event) => {
         dragged.current = key;
         event.dataTransfer.setData("text/plain", key);
         event.dataTransfer.effectAllowed = "move";
       }, onDragEnd: () => {
         dragged.current = null;
         setDrop(null);
-      } }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "grip", size: 13 })), /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-pane-title" }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: key === "chat" ? "chat" : key === "context" ? "layers" : TASK_ICONS2[task], size: 14 }), key === "main" ? TASK_LABELS[task] : paneNames[key]), /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-pane-controls" }, /* @__PURE__ */ import_react12.default.createElement("select", { "aria-label": `${paneNames[key]}\u6362\u4F4D`, title: "\u9762\u677F\u6362\u4F4D", value: "", onChange: (event) => swap(key, event.target.value) }, /* @__PURE__ */ import_react12.default.createElement("option", { value: "" }, "\u2194"), live.order.filter((other) => other !== key && (task !== "writing" || other !== "chat")).map((other) => /* @__PURE__ */ import_react12.default.createElement("option", { key: other, value: other }, "\u4E0E", paneNames[other], "\u6362\u4F4D"))), /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-icon-button", "aria-label": `${live.maximized === key ? "\u8FD8\u539F" : "\u653E\u5927"}${paneNames[key]}`, onClick: () => commit({ ...live, maximized: live.maximized === key ? null : key }) }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "maximize", size: 12 })), /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-icon-button", "aria-label": `\u6536\u8D77${paneNames[key]}`, disabled: shown.length === 1 && !live.maximized, onClick: () => commit({ ...live, collapsed: { ...live.collapsed, [key]: true }, maximized: null }) }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "minimize", size: 13 })))),
-      /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-pane-body", style: key === "chat" ? { display: "flex", flexDirection: "column", overflow: "hidden" } : void 0 }, children[key])
+      } }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "grip", size: 13 })), /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-pane-title" }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: key === "chat" ? "chat" : key === "context" ? "layers" : TASK_ICONS2[task], size: 14 }), key === "main" ? TASK_LABELS[task] : paneNames[key]), /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-pane-controls" }, /* @__PURE__ */ import_react11.default.createElement("select", { "aria-label": `${paneNames[key]}\u6362\u4F4D`, title: "\u9762\u677F\u6362\u4F4D", value: "", onChange: (event) => swap(key, event.target.value) }, /* @__PURE__ */ import_react11.default.createElement("option", { value: "" }, "\u2194"), live.order.filter((other) => other !== key && (task !== "writing" || other !== "chat")).map((other) => /* @__PURE__ */ import_react11.default.createElement("option", { key: other, value: other }, "\u4E0E", paneNames[other], "\u6362\u4F4D"))), /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-icon-button", "aria-label": `${live.maximized === key ? "\u8FD8\u539F" : "\u653E\u5927"}${paneNames[key]}`, onClick: () => commit({ ...live, maximized: live.maximized === key ? null : key }) }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "maximize", size: 12 })), /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-icon-button", "aria-label": `\u6536\u8D77${paneNames[key]}`, disabled: shown.length === 1 && !live.maximized, onClick: () => commit({ ...live, collapsed: { ...live.collapsed, [key]: true }, maximized: null }) }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "minimize", size: 13 })))),
+      /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-pane-body", style: key === "chat" ? { display: "flex", flexDirection: "column", overflow: "hidden" } : void 0 }, children[key])
     ));
     const next = shown[shown.indexOf(key) + 1];
-    if (visible && next && !live.maximized) nodes.push(/* @__PURE__ */ import_react12.default.createElement(Splitter, { key: `${key}-${next}`, left: key, right: next, layout: live, board, onChange: setLive, onCommit: commit, onResizing: setResizing }));
+    if (visible && next && !live.maximized) nodes.push(/* @__PURE__ */ import_react11.default.createElement(Splitter, { key: `${key}-${next}`, left: key, right: next, layout: live, board, onChange: setLive, onCommit: commit, onResizing: setResizing }));
   }
-  return /* @__PURE__ */ import_react12.default.createElement("div", { ref: board, className: "rw-board", "data-pane-count": shown.length, "data-resizing": resizing, onKeyDown: (event) => {
+  return /* @__PURE__ */ import_react11.default.createElement("div", { ref: board, className: "rw-board", "data-pane-count": shown.length, "data-resizing": resizing, onKeyDown: (event) => {
     if (event.key === "Escape" && live.maximized) commit({ ...live, maximized: null });
   } }, nodes);
 }
 function Context({ project, object, onSelect, showResources }) {
-  return /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-context" }, /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-context-section" }, /* @__PURE__ */ import_react12.default.createElement("h3", null, "\u7814\u7A76\u95EE\u9898"), /* @__PURE__ */ import_react12.default.createElement("p", { className: "rw-context-question" }, project.question || "\u6DFB\u52A0\u7814\u7A76\u95EE\u9898\uFF0C\u8BA9\u6B63\u6587\u3001\u6570\u636E\u4E0E\u8BC1\u636E\u56F4\u7ED5\u540C\u4E00\u6761\u4E3B\u7EBF\u5C55\u5F00\u3002")), showResources && /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-context-section" }, /* @__PURE__ */ import_react12.default.createElement("h3", null, "\u9879\u76EE\u8D44\u6599 \xB7 ", project.objects.length), project.objects.map((item) => /* @__PURE__ */ import_react12.default.createElement("button", { key: item.id, className: "rw-resource", "aria-selected": item.id === object?.id, onClick: () => onSelect(item) }, /* @__PURE__ */ import_react12.default.createElement("i", { className: "rw-file-dot", "data-kind": item.kind }), /* @__PURE__ */ import_react12.default.createElement("span", null, item.title), /* @__PURE__ */ import_react12.default.createElement("small", null, "v", item.revision)))), /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-context-section" }, /* @__PURE__ */ import_react12.default.createElement("h3", null, "\u5173\u8054\u4E0E\u6765\u6E90"), project.dependencies?.length ? project.dependencies.map((edge) => /* @__PURE__ */ import_react12.default.createElement("div", { key: edge.id, className: "rw-context-item" }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "link", size: 13 }), /* @__PURE__ */ import_react12.default.createElement("div", null, project.objects.find((item) => item.id === edge.sourceId)?.title, /* @__PURE__ */ import_react12.default.createElement("span", null, " \u2192 "), project.objects.find((item) => item.id === edge.targetId)?.title))) : /* @__PURE__ */ import_react12.default.createElement("p", { className: "rw-context-muted" }, "\u4FDD\u5B58\u7684\u6B63\u6587\u3001\u6570\u636E\u4E0E\u56FE\u8868\u5C5E\u4E8E\u5F53\u524D\u9879\u76EE\u3002\u6587\u732E\u539F\u6587\u4E0E\u8BC1\u636E\u5173\u7CFB\u5C06\u5728\u9605\u8BFB\u7A7A\u95F4\u63A5\u5165\u3002")), /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-context-section" }, /* @__PURE__ */ import_react12.default.createElement("span", { className: "rw-context-tag" }, project.language === "en" ? "\u82F1\u6587\u7A3F\u4EF6" : "\u4E2D\u6587\u7A3F\u4EF6"), project.journal && /* @__PURE__ */ import_react12.default.createElement("span", { className: "rw-context-tag" }, project.journal), project.isDemo && /* @__PURE__ */ import_react12.default.createElement("span", { className: "rw-context-tag" }, "\u5408\u6210\u6570\u636E\u793A\u4F8B")));
+  return /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-context" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-context-section" }, /* @__PURE__ */ import_react11.default.createElement("h3", null, "\u7814\u7A76\u95EE\u9898"), /* @__PURE__ */ import_react11.default.createElement("p", { className: "rw-context-question" }, project.question || "\u6DFB\u52A0\u7814\u7A76\u95EE\u9898\uFF0C\u8BA9\u6B63\u6587\u3001\u6570\u636E\u4E0E\u8BC1\u636E\u56F4\u7ED5\u540C\u4E00\u6761\u4E3B\u7EBF\u5C55\u5F00\u3002")), showResources && /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-context-section" }, /* @__PURE__ */ import_react11.default.createElement("h3", null, "\u9879\u76EE\u8D44\u6599 \xB7 ", project.objects.length), project.objects.map((item) => /* @__PURE__ */ import_react11.default.createElement("button", { key: item.id, className: "rw-resource", "aria-selected": item.id === object?.id, onClick: () => onSelect(item) }, /* @__PURE__ */ import_react11.default.createElement("i", { className: "rw-file-dot", "data-kind": item.kind }), /* @__PURE__ */ import_react11.default.createElement("span", null, item.title), /* @__PURE__ */ import_react11.default.createElement("small", null, "v", item.revision)))), /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-context-section" }, /* @__PURE__ */ import_react11.default.createElement("h3", null, "\u5173\u8054\u4E0E\u6765\u6E90"), project.dependencies?.length ? project.dependencies.map((edge) => /* @__PURE__ */ import_react11.default.createElement("div", { key: edge.id, className: "rw-context-item" }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "link", size: 13 }), /* @__PURE__ */ import_react11.default.createElement("div", null, project.objects.find((item) => item.id === edge.sourceId)?.title, /* @__PURE__ */ import_react11.default.createElement("span", null, " \u2192 "), project.objects.find((item) => item.id === edge.targetId)?.title))) : /* @__PURE__ */ import_react11.default.createElement("p", { className: "rw-context-muted" }, "\u4FDD\u5B58\u7684\u6B63\u6587\u3001\u6570\u636E\u4E0E\u56FE\u8868\u5C5E\u4E8E\u5F53\u524D\u9879\u76EE\u3002\u6587\u732E\u539F\u6587\u4E0E\u8BC1\u636E\u5173\u7CFB\u5C06\u5728\u9605\u8BFB\u7A7A\u95F4\u63A5\u5165\u3002")), /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-context-section" }, /* @__PURE__ */ import_react11.default.createElement("span", { className: "rw-context-tag" }, project.language === "en" ? "\u82F1\u6587\u7A3F\u4EF6" : "\u4E2D\u6587\u7A3F\u4EF6"), project.journal && /* @__PURE__ */ import_react11.default.createElement("span", { className: "rw-context-tag" }, project.journal), project.isDemo && /* @__PURE__ */ import_react11.default.createElement("span", { className: "rw-context-tag" }, "\u5408\u6210\u6570\u636E\u793A\u4F8B")));
 }
 function Content({ object, project, text: text2, task, editMode, onEditMode, onText, onHistory, onCursor, cursor, onScroll, scrollTop, assetUrl, sentence, onOpenNative, api: api2, wordSegment, onWordPosition, onSelectObject, onBrowseWorkspace, wordControl }) {
-  const scroll = import_react12.default.useRef(null);
-  const editor = import_react12.default.useRef(null);
-  const [recovering, setRecovering] = import_react12.default.useState(false), [recoveryError, setRecoveryError] = import_react12.default.useState("");
-  import_react12.default.useEffect(() => setRecoveryError(""), [object?.id]);
-  import_react12.default.useEffect(() => {
+  const scroll = import_react11.default.useRef(null);
+  const editor = import_react11.default.useRef(null);
+  const [recovering, setRecovering] = import_react11.default.useState(false), [recoveryError, setRecoveryError] = import_react11.default.useState("");
+  import_react11.default.useEffect(() => setRecoveryError(""), [object?.id]);
+  import_react11.default.useEffect(() => {
     if (scroll.current) scroll.current.scrollTop = scrollTop || 0;
   }, [object?.id, task]);
-  import_react12.default.useEffect(() => {
+  import_react11.default.useEffect(() => {
     if (editMode && editor.current) {
       editor.current.focus();
       editor.current.setSelectionRange(cursor || 0, cursor || 0);
     }
   }, [object?.id, task, editMode]);
-  if (!object) return /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-empty" }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: TASK_ICONS2[task], size: 30 }), /* @__PURE__ */ import_react12.default.createElement("h2", null, "\u4ECE\u4E00\u4EFD\u8D44\u6599\u5F00\u59CB"), /* @__PURE__ */ import_react12.default.createElement("p", null, "\u5728\u5DE6\u4FA7\u65B0\u5EFA\u7B14\u8BB0\u6216\u5BFC\u5165 Markdown\uFF0C\u4FDD\u5B58\u540E\u7684\u5185\u5BB9\u53EF\u4EE5\u8DE8\u4EFB\u52A1\u4F7F\u7528\u3002"));
-  if (object.contentError) return /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-native-failure", role: "alert" }, recoveryError || object.contentError, /* @__PURE__ */ import_react12.default.createElement("p", null, "\u5DF2\u6709\u6587\u7A3F\u548C\u5386\u53F2\u4FDD\u7559\u3002\u53EF\u4EE5\u91CD\u65B0\u626B\u63CF\u5DE5\u4F5C\u533A\uFF0C\u6216\u5C1D\u8BD5\u6062\u590D\u7F3A\u5931\u7684 Word \u5DE5\u4F5C\u526F\u672C\u3002"), /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-file-recovery-actions" }, object.metadata?.wordEditable && /\.docx$/i.test(object.metadata.workspaceFile || object.title) && /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-secondary", disabled: recovering, onClick: async () => {
+  if (!object) return /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-empty" }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: TASK_ICONS2[task], size: 30 }), /* @__PURE__ */ import_react11.default.createElement("h2", null, "\u4ECE\u4E00\u4EFD\u8D44\u6599\u5F00\u59CB"), /* @__PURE__ */ import_react11.default.createElement("p", null, "\u5728\u5DE6\u4FA7\u65B0\u5EFA\u7B14\u8BB0\u6216\u5BFC\u5165 Markdown\uFF0C\u4FDD\u5B58\u540E\u7684\u5185\u5BB9\u53EF\u4EE5\u8DE8\u4EFB\u52A1\u4F7F\u7528\u3002"));
+  if (object.contentError) return /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-native-failure", role: "alert" }, recoveryError || object.contentError, /* @__PURE__ */ import_react11.default.createElement("p", null, "\u5DF2\u6709\u6587\u7A3F\u548C\u5386\u53F2\u4FDD\u7559\u3002\u53EF\u4EE5\u91CD\u65B0\u626B\u63CF\u5DE5\u4F5C\u533A\uFF0C\u6216\u5C1D\u8BD5\u6062\u590D\u7F3A\u5931\u7684 Word \u5DE5\u4F5C\u526F\u672C\u3002"), /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-file-recovery-actions" }, object.metadata?.wordEditable && /\.docx$/i.test(object.metadata.workspaceFile || object.title) && /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-secondary", disabled: recovering, onClick: async () => {
     setRecovering(true);
     setRecoveryError("");
     try {
@@ -45783,57 +46118,57 @@ function Content({ object, project, text: text2, task, editMode, onEditMode, onT
     } finally {
       setRecovering(false);
     }
-  } }, recovering ? "\u6B63\u5728\u6838\u5BF9\u5E76\u6062\u590D\u2026" : "\u6062\u590D\u5DE5\u4F5C\u526F\u672C"), /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-quiet", onClick: onBrowseWorkspace }, "\u6253\u5F00\u5DE5\u4F5C\u533A\u6587\u4EF6")));
+  } }, recovering ? "\u6B63\u5728\u6838\u5BF9\u5E76\u6062\u590D\u2026" : "\u6062\u590D\u5DE5\u4F5C\u526F\u672C"), /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-quiet", onClick: onBrowseWorkspace }, "\u6253\u5F00\u5DE5\u4F5C\u533A\u6587\u4EF6")));
   if (object.encoding === "binary" && /\.docx$/i.test(object.metadata?.workspaceFile || object.title)) {
     const manuscript = project.objects.find((item) => item.encoding === "utf8" && item.kind === "manuscript" && item.metadata?.workspaceFile?.toLowerCase() === (object.metadata?.workspaceFile || "").replace(/\.docx$/i, ".md").toLowerCase());
-    return task === "writing" ? /* @__PURE__ */ import_react12.default.createElement(WordEditor, { key: object.id, api: api2, project, object, sentence, onHistory, onSelectObject, onBrowseWorkspace, ...wordControl, initialSegment: wordSegment || 0, onPosition: onWordPosition, onOpenNative, onOpenMarkdown: manuscript ? () => onSelectObject(manuscript) : null }) : /* @__PURE__ */ import_react12.default.createElement(WordReader, { key: `${object.id}:${object.revision}`, api: api2, project, object, initialSegment: wordSegment || 0, onPosition: onWordPosition, onOpenNative, onOpenMarkdown: manuscript ? () => onSelectObject(manuscript) : null });
+    return task === "writing" ? /* @__PURE__ */ import_react11.default.createElement(WordEditor, { key: object.id, api: api2, project, object, sentence, onHistory, onSelectObject, onBrowseWorkspace, ...wordControl, initialSegment: wordSegment || 0, onPosition: onWordPosition, onOpenNative, onOpenMarkdown: manuscript ? () => onSelectObject(manuscript) : null }) : /* @__PURE__ */ import_react11.default.createElement(WordReader, { key: `${object.id}:${object.revision}`, api: api2, project, object, initialSegment: wordSegment || 0, onPosition: onWordPosition, onOpenNative, onOpenMarkdown: manuscript ? () => onSelectObject(manuscript) : null });
   }
-  if (object.encoding === "binary" && !(object.kind === "figure" && object.metadata?.mimeType?.startsWith("image/")) && !(object.kind === "data" && object.metadata?.preview)) return /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-file-preview" }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "file", size: 30 }), /* @__PURE__ */ import_react12.default.createElement("h2", null, object.title), /* @__PURE__ */ import_react12.default.createElement("p", null, object.metadata?.workspaceFile || "\u5DE5\u4F5C\u533A\u539F\u59CB\u6587\u4EF6"), /* @__PURE__ */ import_react12.default.createElement("p", { className: "rw-context-muted" }, "\u4FDD\u7559\u539F\u683C\u5F0F\u4E0E\u6587\u4EF6\u7248\u672C\uFF1B\u5728\u539F\u5E94\u7528\u4E2D\u6253\u5F00\u548C\u7F16\u8F91\uFF0C\u5B8C\u6210\u540E\u91CD\u65B0\u626B\u63CF\u5DE5\u4F5C\u533A\u3002"), /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-primary", onClick: onOpenNative }, object.kind === "file" ? "\u5728\u8D44\u6E90\u7BA1\u7406\u5668\u4E2D\u5B9A\u4F4D" : "\u4F7F\u7528\u539F\u5E94\u7528\u6253\u5F00"), object.metadata?.mimeType === "application/pdf" && /* @__PURE__ */ import_react12.default.createElement("iframe", { title: object.title, src: assetUrl(project.id, object.id) }));
-  if (object.kind === "figure") return /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-figure" }, /* @__PURE__ */ import_react12.default.createElement("h2", null, object.title), /* @__PURE__ */ import_react12.default.createElement("p", null, object.metadata?.caption || "\u4FDD\u7559\u539F\u59CB\u56FE\u6587\u4EF6\u4E0E\u6765\u6E90\u7248\u672C\u3002"), /* @__PURE__ */ import_react12.default.createElement("p", { className: "rw-context-muted" }, "\u683C\u5F0F\uFF1A", Object.keys(object.metadata?.formats || {}).join(" / ") || "PNG", " \xB7 \u6E90\u6587\u4EF6 ", object.metadata?.scripts?.length || 0, " \u9879"), Boolean(object.metadata?.missing?.length) && /* @__PURE__ */ import_react12.default.createElement("p", { className: "rw-sentence-warning" }, "\u5386\u53F2\u8D44\u6599\u7F3A\u9879\uFF1A", object.metadata.missing.join("\u3001")), /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-secondary", onClick: () => onOpenNative(true) }, "\u5728\u5DE5\u4F5C\u533A\u4E2D\u5B9A\u4F4D\u56FE\u7A3F"), /* @__PURE__ */ import_react12.default.createElement("img", { src: assetUrl(project.id, object.id), alt: object.metadata?.caption || object.title }), /* @__PURE__ */ import_react12.default.createElement("p", { style: { marginTop: 16 } }, object.metadata?.sampleDescription || "\u9879\u76EE\u4FDD\u5B58\u7684\u56FE\u8868\u8D44\u6E90"));
+  if (object.encoding === "binary" && !(object.kind === "figure" && object.metadata?.mimeType?.startsWith("image/")) && !(object.kind === "data" && object.metadata?.preview)) return /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-file-preview" }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "file", size: 30 }), /* @__PURE__ */ import_react11.default.createElement("h2", null, object.title), /* @__PURE__ */ import_react11.default.createElement("p", null, object.metadata?.workspaceFile || "\u5DE5\u4F5C\u533A\u539F\u59CB\u6587\u4EF6"), /* @__PURE__ */ import_react11.default.createElement("p", { className: "rw-context-muted" }, "\u4FDD\u7559\u539F\u683C\u5F0F\u4E0E\u6587\u4EF6\u7248\u672C\uFF1B\u5728\u539F\u5E94\u7528\u4E2D\u6253\u5F00\u548C\u7F16\u8F91\uFF0C\u5B8C\u6210\u540E\u91CD\u65B0\u626B\u63CF\u5DE5\u4F5C\u533A\u3002"), /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-primary", onClick: onOpenNative }, object.kind === "file" ? "\u5728\u8D44\u6E90\u7BA1\u7406\u5668\u4E2D\u5B9A\u4F4D" : "\u4F7F\u7528\u539F\u5E94\u7528\u6253\u5F00"), object.metadata?.mimeType === "application/pdf" && /* @__PURE__ */ import_react11.default.createElement("iframe", { title: object.title, src: assetUrl(project.id, object.id) }));
+  if (object.kind === "figure") return /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-figure" }, /* @__PURE__ */ import_react11.default.createElement("h2", null, object.title), /* @__PURE__ */ import_react11.default.createElement("p", null, object.metadata?.caption || "\u4FDD\u7559\u539F\u59CB\u56FE\u6587\u4EF6\u4E0E\u6765\u6E90\u7248\u672C\u3002"), /* @__PURE__ */ import_react11.default.createElement("p", { className: "rw-context-muted" }, "\u683C\u5F0F\uFF1A", Object.keys(object.metadata?.formats || {}).join(" / ") || "PNG", " \xB7 \u6E90\u6587\u4EF6 ", object.metadata?.scripts?.length || 0, " \u9879"), Boolean(object.metadata?.missing?.length) && /* @__PURE__ */ import_react11.default.createElement("p", { className: "rw-sentence-warning" }, "\u5386\u53F2\u8D44\u6599\u7F3A\u9879\uFF1A", object.metadata.missing.join("\u3001")), /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-secondary", onClick: () => onOpenNative(true) }, "\u5728\u5DE5\u4F5C\u533A\u4E2D\u5B9A\u4F4D\u56FE\u7A3F"), /* @__PURE__ */ import_react11.default.createElement("img", { src: assetUrl(project.id, object.id), alt: object.metadata?.caption || object.title }), /* @__PURE__ */ import_react11.default.createElement("p", { style: { marginTop: 16 } }, object.metadata?.sampleDescription || "\u9879\u76EE\u4FDD\u5B58\u7684\u56FE\u8868\u8D44\u6E90"));
   if (object.kind === "data") {
     const rows = text2.trim().split("\n").map((line) => line.split(","));
-    return /* @__PURE__ */ import_react12.default.createElement(import_react12.default.Fragment, null, /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-object-toolbar" }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "data" }), /* @__PURE__ */ import_react12.default.createElement("div", null, /* @__PURE__ */ import_react12.default.createElement("h2", null, object.title), /* @__PURE__ */ import_react12.default.createElement("p", null, object.metadata?.preview ? "\u9884\u89C8 " : "", Math.max(0, rows.length - 1), " \u884C \xB7 ", rows[0]?.length || 0, " \u4E2A\u5B57\u6BB5", project.isDemo ? " \xB7 \u5408\u6210\u5B9E\u9A8C\u6837\u4F8B" : object.metadata?.workspaceReadOnly ? " \xB7 \u539F\u59CB\u6570\u636E\u53EA\u8BFB" : "")), /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-quiet", onClick: onHistory }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "clock", size: 14 }), "\u7248\u672C")), /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-table-wrap" }, /* @__PURE__ */ import_react12.default.createElement("table", { className: "rw-table" }, /* @__PURE__ */ import_react12.default.createElement("thead", null, /* @__PURE__ */ import_react12.default.createElement("tr", null, rows[0]?.map((cell, index) => /* @__PURE__ */ import_react12.default.createElement("th", { key: index }, cell)))), /* @__PURE__ */ import_react12.default.createElement("tbody", null, rows.slice(1, 101).map((row, index) => /* @__PURE__ */ import_react12.default.createElement("tr", { key: index }, row.map((cell, n) => /* @__PURE__ */ import_react12.default.createElement("td", { key: n }, cell))))))));
+    return /* @__PURE__ */ import_react11.default.createElement(import_react11.default.Fragment, null, /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-object-toolbar" }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "data" }), /* @__PURE__ */ import_react11.default.createElement("div", null, /* @__PURE__ */ import_react11.default.createElement("h2", null, object.title), /* @__PURE__ */ import_react11.default.createElement("p", null, object.metadata?.preview ? "\u9884\u89C8 " : "", Math.max(0, rows.length - 1), " \u884C \xB7 ", rows[0]?.length || 0, " \u4E2A\u5B57\u6BB5", project.isDemo ? " \xB7 \u5408\u6210\u5B9E\u9A8C\u6837\u4F8B" : object.metadata?.workspaceReadOnly ? " \xB7 \u539F\u59CB\u6570\u636E\u53EA\u8BFB" : "")), /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-quiet", onClick: onHistory }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "clock", size: 14 }), "\u7248\u672C")), /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-table-wrap" }, /* @__PURE__ */ import_react11.default.createElement("table", { className: "rw-table" }, /* @__PURE__ */ import_react11.default.createElement("thead", null, /* @__PURE__ */ import_react11.default.createElement("tr", null, rows[0]?.map((cell, index) => /* @__PURE__ */ import_react11.default.createElement("th", { key: index }, cell)))), /* @__PURE__ */ import_react11.default.createElement("tbody", null, rows.slice(1, 101).map((row, index) => /* @__PURE__ */ import_react11.default.createElement("tr", { key: index }, row.map((cell, n) => /* @__PURE__ */ import_react11.default.createElement("td", { key: n }, cell))))))));
   }
-  return /* @__PURE__ */ import_react12.default.createElement("div", { ref: scroll, style: { height: "100%", overflow: "auto", display: "flex", flexDirection: "column" }, onScroll: (event) => onScroll(event.currentTarget.scrollTop) }, /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-pane-toolbar" }, /* @__PURE__ */ import_react12.default.createElement("span", { className: "rw-document-name" }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "file", size: 12 }), object.title.endsWith(".md") ? object.title : `${object.title}.md`, /* @__PURE__ */ import_react12.default.createElement("span", null, "\xB7"), "v", object.revision), /* @__PURE__ */ import_react12.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-icon-button", "aria-label": "\u67E5\u770B\u5185\u5BB9\u7248\u672C", onClick: onHistory }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "clock", size: 13 })), /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-mode-tabs" }, /* @__PURE__ */ import_react12.default.createElement("button", { "aria-pressed": !editMode, onClick: () => onEditMode(false) }, task === "writing" && object.kind === "manuscript" ? "\u5199\u4F5C" : "\u9605\u8BFB"), /* @__PURE__ */ import_react12.default.createElement("button", { "aria-pressed": editMode, onClick: () => onEditMode(true) }, "\u6E90\u7801")))), editMode ? /* @__PURE__ */ import_react12.default.createElement("textarea", { ref: editor, className: "rw-editor", "aria-label": "Markdown \u8349\u7A3F", spellCheck: false, value: text2, onChange: (event) => onText(event.target.value), onSelect: (event) => onCursor(event.currentTarget.selectionStart) }) : /* @__PURE__ */ import_react12.default.createElement("article", { className: "rw-paper" }, /* @__PURE__ */ import_react12.default.createElement("p", { className: "rw-paper-eyebrow" }, object.kind === "note" ? "Research note" : "Manuscript draft", " \xB7 ", project.isDemo ? "Synthetic example" : "Working paper"), /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-paper-meta" }, /* @__PURE__ */ import_react12.default.createElement("span", null, project.title), /* @__PURE__ */ import_react12.default.createElement("span", null, project.language === "en" ? "English" : "\u4E2D\u6587\u7A3F\u4EF6"), /* @__PURE__ */ import_react12.default.createElement("span", null, date(object.updatedAt))), task === "writing" && object.kind === "manuscript" ? /* @__PURE__ */ import_react12.default.createElement(SentenceEditor, { key: object.id, text: text2, object, project, onText, ...sentence }) : /* @__PURE__ */ import_react12.default.createElement(Markdown2, { text: text2 })));
+  return /* @__PURE__ */ import_react11.default.createElement("div", { ref: scroll, style: { height: "100%", overflow: "auto", display: "flex", flexDirection: "column" }, onScroll: (event) => onScroll(event.currentTarget.scrollTop) }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-pane-toolbar" }, /* @__PURE__ */ import_react11.default.createElement("span", { className: "rw-document-name" }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "file", size: 12 }), object.title.endsWith(".md") ? object.title : `${object.title}.md`, /* @__PURE__ */ import_react11.default.createElement("span", null, "\xB7"), "v", object.revision), /* @__PURE__ */ import_react11.default.createElement("div", { style: { display: "flex", alignItems: "center", gap: 5 } }, /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-icon-button", "aria-label": "\u67E5\u770B\u5185\u5BB9\u7248\u672C", onClick: onHistory }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "clock", size: 13 })), /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-mode-tabs" }, /* @__PURE__ */ import_react11.default.createElement("button", { "aria-pressed": !editMode, onClick: () => onEditMode(false) }, task === "writing" && object.kind === "manuscript" ? "\u5199\u4F5C" : "\u9605\u8BFB"), /* @__PURE__ */ import_react11.default.createElement("button", { "aria-pressed": editMode, onClick: () => onEditMode(true) }, "\u6E90\u7801")))), editMode ? /* @__PURE__ */ import_react11.default.createElement("textarea", { ref: editor, className: "rw-editor", "aria-label": "Markdown \u8349\u7A3F", spellCheck: false, value: text2, onChange: (event) => onText(event.target.value), onSelect: (event) => onCursor(event.currentTarget.selectionStart) }) : /* @__PURE__ */ import_react11.default.createElement("article", { className: "rw-paper" }, /* @__PURE__ */ import_react11.default.createElement("p", { className: "rw-paper-eyebrow" }, object.kind === "note" ? "Research note" : "Manuscript draft", " \xB7 ", project.isDemo ? "Synthetic example" : "Working paper"), /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-paper-meta" }, /* @__PURE__ */ import_react11.default.createElement("span", null, project.title), /* @__PURE__ */ import_react11.default.createElement("span", null, project.language === "en" ? "English" : "\u4E2D\u6587\u7A3F\u4EF6"), /* @__PURE__ */ import_react11.default.createElement("span", null, date(object.updatedAt))), task === "writing" && object.kind === "manuscript" ? /* @__PURE__ */ import_react11.default.createElement(SentenceEditor, { key: object.id, text: text2, object, project, onText, ...sentence }) : /* @__PURE__ */ import_react11.default.createElement(Markdown2, { text: text2 })));
 }
 function App({ api: api2, nativeRender, nativeSentenceRender, onLeave = null, preview = false }) {
-  const [state, setState] = import_react12.default.useState({ projects: [], activeProjectId: null });
-  const current = import_react12.default.useRef(state);
-  const [sidebarCollapsed, setSidebarCollapsed] = import_react12.default.useState(() => readSidebarCollapsed());
+  const [state, setState] = import_react11.default.useState({ projects: [], activeProjectId: null });
+  const current = import_react11.default.useRef(state);
+  const [sidebarCollapsed, setSidebarCollapsed] = import_react11.default.useState(() => readSidebarCollapsed());
   const toggleSidebar = () => setSidebarCollapsed((value) => {
     const next = !value;
     rememberSidebarCollapsed(next);
     return next;
   });
-  const [error, setError] = import_react12.default.useState("");
-  const [notice, setNotice] = import_react12.default.useState("");
-  const [loading, setLoading] = import_react12.default.useState(true);
-  const [modal, setModal] = import_react12.default.useState(null);
-  const [projectToRemove, setProjectToRemove] = import_react12.default.useState(null), [removingProject, setRemovingProject] = import_react12.default.useState(false), [removalError, setRemovalError] = import_react12.default.useState("");
-  const [mottoSettingsOpen, setMottoSettingsOpen] = import_react12.default.useState(false);
-  const [form, setForm] = import_react12.default.useState({ title: "", question: "", journal: "", language: "zh" });
-  const [history2, setHistory] = import_react12.default.useState([]);
-  const drafts = import_react12.default.useRef(/* @__PURE__ */ new Map());
-  const [draftEpoch, setDraftEpoch] = import_react12.default.useState(0);
-  const saving = import_react12.default.useRef(null);
-  const wordSave = import_react12.default.useRef(null), wordDirty = import_react12.default.useRef(false);
-  const [wordChanged, setWordChanged] = import_react12.default.useState(false);
-  const registerWordSave = import_react12.default.useCallback((callback) => {
+  const [error, setError] = import_react11.default.useState("");
+  const [notice, setNotice] = import_react11.default.useState("");
+  const [loading, setLoading] = import_react11.default.useState(true);
+  const [modal, setModal] = import_react11.default.useState(null);
+  const [projectToRemove, setProjectToRemove] = import_react11.default.useState(null), [removingProject, setRemovingProject] = import_react11.default.useState(false), [removalError, setRemovalError] = import_react11.default.useState("");
+  const [mottoSettingsOpen, setMottoSettingsOpen] = import_react11.default.useState(false);
+  const [form, setForm] = import_react11.default.useState({ title: "", question: "", journal: "", language: "zh" });
+  const [history2, setHistory] = import_react11.default.useState([]);
+  const drafts = import_react11.default.useRef(/* @__PURE__ */ new Map());
+  const [draftEpoch, setDraftEpoch] = import_react11.default.useState(0);
+  const saving = import_react11.default.useRef(null);
+  const wordSave = import_react11.default.useRef(null), wordDirty = import_react11.default.useRef(false);
+  const [wordChanged, setWordChanged] = import_react11.default.useState(false);
+  const registerWordSave = import_react11.default.useCallback((callback) => {
     wordSave.current = callback;
     return () => {
       if (wordSave.current === callback) wordSave.current = null;
     };
   }, []);
-  const markWordDirty = import_react12.default.useCallback((value) => {
+  const markWordDirty = import_react11.default.useCallback((value) => {
     wordDirty.current = value;
     setWordChanged(value);
   }, []);
-  const [saveBusy, setSaveBusy] = import_react12.default.useState(false);
-  const liveTasks = import_react12.default.useRef(/* @__PURE__ */ new Map());
-  const [taskEpoch, setTaskEpoch] = import_react12.default.useState(0);
-  const importRef = import_react12.default.useRef(null);
-  const mounted = import_react12.default.useRef(true);
-  const accept = import_react12.default.useCallback((next) => {
+  const [saveBusy, setSaveBusy] = import_react11.default.useState(false);
+  const liveTasks = import_react11.default.useRef(/* @__PURE__ */ new Map());
+  const [taskEpoch, setTaskEpoch] = import_react11.default.useState(0);
+  const importRef = import_react11.default.useRef(null);
+  const mounted = import_react11.default.useRef(true);
+  const accept = import_react11.default.useCallback((next) => {
     if (!mounted.current) return;
     current.current = next;
     setState(next);
@@ -45845,7 +46180,7 @@ function App({ api: api2, nativeRender, nativeSentenceRender, onLeave = null, pr
       setError("\u6D4F\u89C8\u5668\u672A\u80FD\u7F13\u5B58\u672A\u4FDD\u5B58\u8F93\u5165\uFF0C\u8BF7\u5148\u4FDD\u5B58\u8D44\u6599\u518D\u9000\u51FA\u3002");
     }
   };
-  import_react12.default.useEffect(() => {
+  import_react11.default.useEffect(() => {
     mounted.current = true;
     api2.bootstrap().then((next) => {
       try {
@@ -45870,8 +46205,34 @@ function App({ api: api2, nativeRender, nativeSentenceRender, onLeave = null, pr
     accept(next);
     return next;
   };
-  import_react12.default.useEffect(() => {
+  import_react11.default.useEffect(() => {
     if (!api2.stamp) return;
+    if (api2.watchState) {
+      if (!state.stamp) return;
+      let closed = false;
+      const controller = new AbortController();
+      let retry;
+      const watch = async () => {
+        while (!closed) {
+          try {
+            const next = await api2.watchState(current.current.stamp, controller.signal);
+            if (closed) return;
+            if (next.stamp !== current.current.stamp) accept(await api2.bootstrap());
+          } catch {
+            if (closed) return;
+            await new Promise((resolve) => {
+              retry = setTimeout(resolve, 1e3);
+            });
+          }
+        }
+      };
+      void watch();
+      return () => {
+        closed = true;
+        controller.abort();
+        clearTimeout(retry);
+      };
+    }
     let pending = false, cancelled = false;
     const check = async () => {
       if (pending || document.visibilityState === "hidden") return;
@@ -45896,7 +46257,7 @@ function App({ api: api2, nativeRender, nativeSentenceRender, onLeave = null, pr
       window.removeEventListener("focus", check);
       document.removeEventListener("visibilitychange", check);
     };
-  }, [api2, accept]);
+  }, [api2, accept, Boolean(state.stamp)]);
   const safe = (fn) => async (...args) => {
     try {
       setError("");
@@ -45906,7 +46267,7 @@ function App({ api: api2, nativeRender, nativeSentenceRender, onLeave = null, pr
       return null;
     }
   };
-  const flush = import_react12.default.useCallback(async () => {
+  const flush = import_react11.default.useCallback(async () => {
     if (saving.current) return saving.current;
     const operation = (async () => {
       setSaveBusy(true);
@@ -45938,12 +46299,12 @@ function App({ api: api2, nativeRender, nativeSentenceRender, onLeave = null, pr
       saving.current = null;
     }
   }, [api2, accept]);
-  import_react12.default.useEffect(() => {
+  import_react11.default.useEffect(() => {
     if (!drafts.current.size) return;
     const timer = setTimeout(() => void flush().catch((e) => setError(e.message)), 750);
     return () => clearTimeout(timer);
   }, [draftEpoch, flush]);
-  import_react12.default.useEffect(() => {
+  import_react11.default.useEffect(() => {
     const guard = (event) => {
       if (drafts.current.size || wordDirty.current) {
         event.preventDefault();
@@ -45953,7 +46314,7 @@ function App({ api: api2, nativeRender, nativeSentenceRender, onLeave = null, pr
     window.addEventListener("beforeunload", guard);
     return () => window.removeEventListener("beforeunload", guard);
   }, []);
-  import_react12.default.useEffect(() => {
+  import_react11.default.useEffect(() => {
     if (!state.projects.some((p) => p.jobs?.some((job) => ["queued", "running"].includes(job.status)))) return;
     const interval = setInterval(() => api2.bootstrap().then(accept).catch(() => {
     }), 1600);
@@ -45964,7 +46325,7 @@ function App({ api: api2, nativeRender, nativeSentenceRender, onLeave = null, pr
   const taskKey = project ? `${project.id}:${task}` : "";
   const storedTask = project?.taskStates?.[task]?.value || {};
   const view = { ...storedTask, ...liveTasks.current.get(taskKey) };
-  const layout = import_react12.default.useMemo(() => {
+  const layout = import_react11.default.useMemo(() => {
     const value = normalizeLayout(view.layout, task);
     return task === "writing" ? { ...value, collapsed: { ...value.collapsed, chat: true }, maximized: value.maximized === "chat" ? null : value.maximized } : value;
   }, [view.layout, task]);
@@ -45980,8 +46341,8 @@ function App({ api: api2, nativeRender, nativeSentenceRender, onLeave = null, pr
     accept(next);
     if (liveTasks.current.get(key) === base2) liveTasks.current.delete(key);
   };
-  const pendingViewTimers = import_react12.default.useRef(/* @__PURE__ */ new Map());
-  const pendingViewPatches = import_react12.default.useRef(/* @__PURE__ */ new Map());
+  const pendingViewTimers = import_react11.default.useRef(/* @__PURE__ */ new Map());
+  const pendingViewPatches = import_react11.default.useRef(/* @__PURE__ */ new Map());
   const ephemeralView = (patch) => {
     const key = taskKey, owner = project.id, ownerTask = task;
     const base2 = { ...view, ...liveTasks.current.get(key), ...patch };
@@ -46084,9 +46445,9 @@ function App({ api: api2, nativeRender, nativeSentenceRender, onLeave = null, pr
   const running = state.projects.flatMap((p) => p.jobs || []).filter((job) => ["queued", "running"].includes(job.status)).length;
   const changed = drafts.current.size > 0 || wordChanged;
   const isWord = object?.encoding === "binary" && /\.docx$/i.test(object.metadata?.workspaceFile || object.title);
-  const prepareSentence = async ({ markdown, ...request }) => {
+  const prepareSentence = async ({ markdown, wordSaved = false, ...request }) => {
     if (request.wordSelection) {
-      await saveAll();
+      if (!wordSaved) await saveAll();
       const saved2 = current.current.projects.find((p) => p.id === project.id).objects.find((o) => o.id === object.id);
       const next2 = await mutate("prepareSentenceSession", { ...request, projectId: project.id, objectId: object.id, expectedRevision: saved2.revision });
       return next2.actionResult.jobId;
@@ -46101,8 +46462,8 @@ function App({ api: api2, nativeRender, nativeSentenceRender, onLeave = null, pr
     const next = await mutate("prepareSentenceSession", { ...request, projectId: project.id, objectId: object.id, expectedRevision: saved.revision, operationKey: crypto.randomUUID() });
     return next.actionResult.jobId;
   };
-  const context2 = project && /* @__PURE__ */ import_react12.default.createElement(Context, { project, object, onSelect: selectObject, showResources: sidebarCollapsed });
-  const content = project && /* @__PURE__ */ import_react12.default.createElement(Content, { key: `${project.id}:${task}`, project, task, object, text: text2, editMode: Boolean(view.editMode), cursor: view.cursor, scrollTop: view.scrollTop, onCursor: (cursor) => ephemeralView({ cursor }), onScroll: (scrollTop) => ephemeralView({ scrollTop }), onEditMode: safe((editMode) => persistView({ editMode })), onText: (value) => {
+  const context2 = project && /* @__PURE__ */ import_react11.default.createElement(Context, { project, object, onSelect: selectObject, showResources: sidebarCollapsed });
+  const content = project && /* @__PURE__ */ import_react11.default.createElement(Content, { key: `${project.id}:${task}`, project, task, object, text: text2, editMode: Boolean(view.editMode), cursor: view.cursor, scrollTop: view.scrollTop, onCursor: (cursor) => ephemeralView({ cursor }), onScroll: (scrollTop) => ephemeralView({ scrollTop }), onEditMode: safe((editMode) => persistView({ editMode })), onText: (value) => {
     drafts.current.set(object.id, { projectId: project.id, text: value, expectedRevision: drafts.current.get(object.id)?.expectedRevision ?? object.revision });
     cacheDrafts();
     setDraftEpoch((n) => n + 1);
@@ -46126,7 +46487,11 @@ function App({ api: api2, nativeRender, nativeSentenceRender, onLeave = null, pr
       return next.actionResult.jobId;
     } : null,
     initialNativeJobId: project.writingThreads?.[object?.id]?.jobId || view.sentenceJobId,
-    onNativeOpen: (jobId) => persistView({ sentenceJobId: jobId }),
+    onNativeOpen: (jobId) => {
+      const owner = current.current.projects.find((item) => item.id === project.id);
+      if (owner?.writingThreads?.[object.id]?.jobId === jobId) return;
+      return persistView({ sentenceJobId: jobId });
+    },
     onRefresh: async () => {
       const fresh = await api2.stamp();
       if (fresh.stamp !== current.current.stamp) accept(await api2.bootstrap());
@@ -46145,46 +46510,47 @@ function App({ api: api2, nativeRender, nativeSentenceRender, onLeave = null, pr
     onClassify: async (jobId, data) => {
       await mutate("classifySentence", { projectId: project.id, jobId, ...data });
     },
-    onAction: async (action, jobId) => {
-      await saveAll();
-      await mutate(action, { projectId: project.id, jobId });
+    onEditSuggestion: async (jobId, data) => mutate("editSentenceSuggestion", { projectId: project.id, jobId, ...data }),
+    onAction: async (action, jobId, options = {}) => {
+      if (!options.wordSaved) await saveAll();
+      return mutate(action, { projectId: project.id, jobId });
     },
     onImport: async (data) => {
       await mutate("importLiterature", { ...data, projectId: project.id });
     }
   } });
-  const chat = project && task !== "writing" && /* @__PURE__ */ import_react12.default.createElement(import_react12.default.Fragment, null, /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-chat-intro" }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "link", size: 12 }), /* @__PURE__ */ import_react12.default.createElement("span", null, "\u5DF2\u5173\u8054\u5F53\u524D\u9879\u76EE\u8D44\u6599")), /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-chat-area" }, nativeRender ? nativeRender({ project, task, projects: state.projects, acceptance: state.nativeAcceptance, onBinding: accept, onError: setError }) : /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-chat-empty" }, /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-chat-symbol" }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "chat", size: 23 })), /* @__PURE__ */ import_react12.default.createElement("h3", null, "\u628A\u601D\u8DEF\u7559\u5728\u7814\u7A76\u73B0\u573A"), /* @__PURE__ */ import_react12.default.createElement("p", null, preview ? "\u8FD9\u662F\u72EC\u7ACB\u754C\u9762\u9884\u89C8\u3002DSH \u4E2D\u4F1A\u5728\u6B64\u627F\u8F7D\u539F\u751F\u5BF9\u8BDD\uFF0C\u6CBF\u7528\u5DF2\u6709\u6A21\u578B\u914D\u7F6E\u3002" : "\u5728 DSH Desktop \u6253\u5F00\u5DE5\u4F5C\u53F0\uFF0C\u4F7F\u7528\u5199\u4F5C\u3001\u5236\u56FE\u548C\u9605\u8BFB\u5404\u81EA\u7684\u539F\u751F\u5BF9\u8BDD\u3002", /* @__PURE__ */ import_react12.default.createElement("br", null), "\u9879\u76EE\u8D44\u6599\u59CB\u7EC8\u53EF\u4EE5\u72EC\u7ACB\u4F7F\u7528\u3002"))));
-  return /* @__PURE__ */ import_react12.default.createElement(import_react12.default.Fragment, null, /* @__PURE__ */ import_react12.default.createElement("style", null, workbenchStyles), /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-app", "data-task": task, "data-sidebar-collapsed": sidebarCollapsed, "data-acceptance": Boolean(state.nativeAcceptance), onKeyDown: (event) => {
+  const chat = project && task !== "writing" && /* @__PURE__ */ import_react11.default.createElement(import_react11.default.Fragment, null, /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-chat-intro" }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "link", size: 12 }), /* @__PURE__ */ import_react11.default.createElement("span", null, "\u5DF2\u5173\u8054\u5F53\u524D\u9879\u76EE\u8D44\u6599")), /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-chat-area" }, nativeRender ? nativeRender({ project, task, projects: state.projects, acceptance: state.nativeAcceptance, onBinding: accept, onError: setError }) : /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-chat-empty" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-chat-symbol" }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "chat", size: 23 })), /* @__PURE__ */ import_react11.default.createElement("h3", null, "\u628A\u601D\u8DEF\u7559\u5728\u7814\u7A76\u73B0\u573A"), /* @__PURE__ */ import_react11.default.createElement("p", null, preview ? "\u8FD9\u662F\u72EC\u7ACB\u754C\u9762\u9884\u89C8\u3002DSH \u4E2D\u4F1A\u5728\u6B64\u627F\u8F7D\u539F\u751F\u5BF9\u8BDD\uFF0C\u6CBF\u7528\u5DF2\u6709\u6A21\u578B\u914D\u7F6E\u3002" : "\u5728 DSH Desktop \u6253\u5F00\u5DE5\u4F5C\u53F0\uFF0C\u4F7F\u7528\u5199\u4F5C\u3001\u5236\u56FE\u548C\u9605\u8BFB\u5404\u81EA\u7684\u539F\u751F\u5BF9\u8BDD\u3002", /* @__PURE__ */ import_react11.default.createElement("br", null), "\u9879\u76EE\u8D44\u6599\u59CB\u7EC8\u53EF\u4EE5\u72EC\u7ACB\u4F7F\u7528\u3002"))));
+  return /* @__PURE__ */ import_react11.default.createElement(import_react11.default.Fragment, null, /* @__PURE__ */ import_react11.default.createElement("style", null, workbenchStyles), /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-app", "data-task": task, "data-sidebar-collapsed": sidebarCollapsed, "data-acceptance": Boolean(state.nativeAcceptance), onKeyDown: (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
       event.preventDefault();
       void safe(saveAll)();
     }
-  } }, /* @__PURE__ */ import_react12.default.createElement("header", { className: "rw-topbar" }, /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-icon-button rw-sidebar-toggle", "aria-label": sidebarCollapsed ? "\u5C55\u5F00\u5DE5\u4F5C\u53F0\u5DE6\u4FA7\u680F" : "\u6536\u8D77\u5DE5\u4F5C\u53F0\u5DE6\u4FA7\u680F", "aria-expanded": !sidebarCollapsed, "aria-controls": "rw-project-sidebar", title: sidebarCollapsed ? "\u5C55\u5F00\u5DE6\u4FA7\u680F" : "\u6536\u8D77\u4E3A\u56FE\u6807\u680F", onClick: toggleSidebar }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "sidebar", size: 18 })), /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-brand" }, /* @__PURE__ */ import_react12.default.createElement("span", { className: "rw-brand-emblem" }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "brand", size: 18 })), /* @__PURE__ */ import_react12.default.createElement("strong", null, "\u79D1\u7814\u5DE5\u4F5C\u53F0")), /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-breadcrumb" }, /* @__PURE__ */ import_react12.default.createElement("strong", { title: project?.rootPath || "" }, project?.title || "\u5F00\u542F\u65B0\u7684\u7814\u7A76"), project && /* @__PURE__ */ import_react12.default.createElement(import_react12.default.Fragment, null, /* @__PURE__ */ import_react12.default.createElement("span", { className: "rw-breadcrumb-divider", "aria-hidden": "true" }, "/"), /* @__PURE__ */ import_react12.default.createElement("h1", { className: "rw-task-label" }, TASK_LABELS[task])), project?.isDemo && /* @__PURE__ */ import_react12.default.createElement("span", { className: "rw-sample-tag" }, "\u5B9E\u9A8C\u793A\u4F8B")), /* @__PURE__ */ import_react12.default.createElement(MottoTicker, { settingsOpen: mottoSettingsOpen, onSettingsChange: setMottoSettingsOpen }), /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-top-actions" }, /* @__PURE__ */ import_react12.default.createElement("span", { className: "rw-save-state", "data-dirty": changed || Boolean(error) }, saveBusy ? "\u6B63\u5728\u4FDD\u5B58" : error ? "\u6709\u5185\u5BB9\u5C1A\u672A\u4FDD\u5B58" : changed ? "\u6709\u672A\u4FDD\u5B58\u5185\u5BB9" : project?.workspace?.checkpointError ? "\u5DE5\u4F5C\u533A\u5F85\u540C\u6B65" : "\u5DF2\u4FDD\u5B58"), /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-primary rw-global-save", disabled: !project || saveBusy, "aria-label": isWord ? "\u4FDD\u5B58 Word" : "\u4FDD\u5B58\u8D44\u6599", title: isWord ? "\u4FDD\u5B58\u5230\u540C\u4E00 Word \u5DE5\u4F5C\u526F\u672C\uFF08Ctrl+S\uFF09" : "\u4FDD\u5B58\uFF08Ctrl+S\uFF09", onClick: () => void safe(saveAll)() }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "save", size: 14 }), /* @__PURE__ */ import_react12.default.createElement("span", null, "\u4FDD\u5B58")), /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-icon-button", "aria-label": "\u540E\u53F0\u4EFB\u52A1", title: running ? `${running} \u4E2A\u540E\u53F0\u4EFB\u52A1` : "\u540E\u53F0\u4EFB\u52A1", onClick: () => setModal("jobs") }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "clock", size: 16 }), running > 0 && /* @__PURE__ */ import_react12.default.createElement("small", null, running)), /* @__PURE__ */ import_react12.default.createElement(ActionMenu, { label: "\u5DE5\u4F5C\u53F0\u4E0E\u5E03\u5C40\u64CD\u4F5C", icon: "settings" }, project && /* @__PURE__ */ import_react12.default.createElement(import_react12.default.Fragment, null, /* @__PURE__ */ import_react12.default.createElement("button", { onClick: () => void safe(() => persistView({ layout: { ...layout, maximized: layout.maximized === "main" ? null : "main" } }))() }, layout.maximized === "main" ? "\u8FD8\u539F\u9762\u677F\u5927\u5C0F" : "\u653E\u5927\u5F53\u524D\u5DE5\u4F5C\u533A"), /* @__PURE__ */ import_react12.default.createElement("button", { onClick: () => void safe(() => persistView({ layout: { ...layout, collapsed: { ...layout.collapsed, context: !layout.collapsed.context }, maximized: null } }))() }, layout.collapsed.context ? "\u663E\u793A\u9879\u76EE\u8D44\u6599\u9762\u677F" : "\u6536\u8D77\u9879\u76EE\u8D44\u6599\u9762\u677F"), Object.entries(layout.collapsed).filter(([key, hidden]) => hidden && key !== "context" && (task !== "writing" || key !== "chat")).map(([key]) => /* @__PURE__ */ import_react12.default.createElement("button", { key, onClick: () => void safe(() => persistView({ layout: { ...layout, collapsed: { ...layout.collapsed, [key]: false }, maximized: null } }))() }, "\u5C55\u5F00", paneNames[key])), /* @__PURE__ */ import_react12.default.createElement("button", { onClick: () => void safe(() => persistView({ layout: defaultLayout(task) }))() }, "\u91CD\u7F6E\u5E03\u5C40")), /* @__PURE__ */ import_react12.default.createElement("button", { onClick: () => setMottoSettingsOpen(true) }, "\u52B1\u5FD7\u6807\u8BED\u8BBE\u7F6E"), /* @__PURE__ */ import_react12.default.createElement("button", { onClick: () => setModal("about") }, "\u5DE5\u4F5C\u53F0\u4FE1\u606F")), onLeave && /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-icon-button", "aria-label": "\u8FD4\u56DE DSH", title: "\u8FD4\u56DE DSH", onClick: () => void safe(async () => {
+  } }, /* @__PURE__ */ import_react11.default.createElement("header", { className: "rw-topbar" }, /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-icon-button rw-sidebar-toggle", "aria-label": sidebarCollapsed ? "\u5C55\u5F00\u5DE5\u4F5C\u53F0\u5DE6\u4FA7\u680F" : "\u6536\u8D77\u5DE5\u4F5C\u53F0\u5DE6\u4FA7\u680F", "aria-expanded": !sidebarCollapsed, "aria-controls": "rw-project-sidebar", title: sidebarCollapsed ? "\u5C55\u5F00\u5DE6\u4FA7\u680F" : "\u6536\u8D77\u4E3A\u56FE\u6807\u680F", onClick: toggleSidebar }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "sidebar", size: 18 })), /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-brand" }, /* @__PURE__ */ import_react11.default.createElement("span", { className: "rw-brand-emblem" }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "brand", size: 18 })), /* @__PURE__ */ import_react11.default.createElement("strong", null, "\u79D1\u7814\u5DE5\u4F5C\u53F0")), /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-breadcrumb" }, /* @__PURE__ */ import_react11.default.createElement("strong", { title: project?.rootPath || "" }, project?.title || "\u5F00\u542F\u65B0\u7684\u7814\u7A76"), project && /* @__PURE__ */ import_react11.default.createElement(import_react11.default.Fragment, null, /* @__PURE__ */ import_react11.default.createElement("span", { className: "rw-breadcrumb-divider", "aria-hidden": "true" }, "/"), /* @__PURE__ */ import_react11.default.createElement("h1", { className: "rw-task-label" }, TASK_LABELS[task])), project?.isDemo && /* @__PURE__ */ import_react11.default.createElement("span", { className: "rw-sample-tag" }, "\u5B9E\u9A8C\u793A\u4F8B")), /* @__PURE__ */ import_react11.default.createElement(MottoTicker, { settingsOpen: mottoSettingsOpen, onSettingsChange: setMottoSettingsOpen }), /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-top-actions" }, /* @__PURE__ */ import_react11.default.createElement("span", { className: "rw-save-state", "data-dirty": changed || Boolean(error) }, saveBusy ? "\u6B63\u5728\u4FDD\u5B58" : error ? "\u6709\u5185\u5BB9\u5C1A\u672A\u4FDD\u5B58" : changed ? "\u6709\u672A\u4FDD\u5B58\u5185\u5BB9" : project?.workspace?.checkpointError ? "\u5DE5\u4F5C\u533A\u5F85\u540C\u6B65" : "\u5DF2\u4FDD\u5B58"), /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-primary rw-global-save", disabled: !project || saveBusy, "aria-label": isWord ? "\u4FDD\u5B58 Word" : "\u4FDD\u5B58\u8D44\u6599", title: isWord ? "\u4FDD\u5B58\u5230\u540C\u4E00 Word \u5DE5\u4F5C\u526F\u672C\uFF08Ctrl+S\uFF09" : "\u4FDD\u5B58\uFF08Ctrl+S\uFF09", onClick: () => void safe(saveAll)() }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "save", size: 14 }), /* @__PURE__ */ import_react11.default.createElement("span", null, "\u4FDD\u5B58")), /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-icon-button", "aria-label": "\u540E\u53F0\u4EFB\u52A1", title: running ? `${running} \u4E2A\u540E\u53F0\u4EFB\u52A1` : "\u540E\u53F0\u4EFB\u52A1", onClick: () => setModal("jobs") }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "clock", size: 16 }), running > 0 && /* @__PURE__ */ import_react11.default.createElement("small", null, running)), /* @__PURE__ */ import_react11.default.createElement(ActionMenu, { label: "\u5DE5\u4F5C\u53F0\u4E0E\u5E03\u5C40\u64CD\u4F5C", icon: "settings" }, project && /* @__PURE__ */ import_react11.default.createElement(import_react11.default.Fragment, null, /* @__PURE__ */ import_react11.default.createElement("button", { onClick: () => void safe(() => persistView({ layout: { ...layout, maximized: layout.maximized === "main" ? null : "main" } }))() }, layout.maximized === "main" ? "\u8FD8\u539F\u9762\u677F\u5927\u5C0F" : "\u653E\u5927\u5F53\u524D\u5DE5\u4F5C\u533A"), /* @__PURE__ */ import_react11.default.createElement("button", { onClick: () => void safe(() => persistView({ layout: { ...layout, collapsed: { ...layout.collapsed, context: !layout.collapsed.context }, maximized: null } }))() }, layout.collapsed.context ? "\u663E\u793A\u9879\u76EE\u8D44\u6599\u9762\u677F" : "\u6536\u8D77\u9879\u76EE\u8D44\u6599\u9762\u677F"), Object.entries(layout.collapsed).filter(([key, hidden]) => hidden && key !== "context" && (task !== "writing" || key !== "chat")).map(([key]) => /* @__PURE__ */ import_react11.default.createElement("button", { key, onClick: () => void safe(() => persistView({ layout: { ...layout, collapsed: { ...layout.collapsed, [key]: false }, maximized: null } }))() }, "\u5C55\u5F00", paneNames[key])), /* @__PURE__ */ import_react11.default.createElement("button", { onClick: () => void safe(() => persistView({ layout: defaultLayout(task) }))() }, "\u91CD\u7F6E\u5E03\u5C40")), /* @__PURE__ */ import_react11.default.createElement("button", { onClick: () => setMottoSettingsOpen(true) }, "\u52B1\u5FD7\u6807\u8BED\u8BBE\u7F6E"), /* @__PURE__ */ import_react11.default.createElement("button", { onClick: () => setModal("about") }, "\u5DE5\u4F5C\u53F0\u4FE1\u606F")), onLeave && /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-icon-button", "aria-label": "\u8FD4\u56DE DSH", title: "\u8FD4\u56DE DSH", onClick: () => void safe(async () => {
     await saveAll();
     onLeave();
-  })() }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "arrow", size: 16 })))), state.nativeAcceptance && /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-banner", role: "status" }, state.nativeAcceptance.mode === "restore" ? "\u672C\u673A\u9A8C\u6536\u6A21\u5F0F \xB7 \u6D4B\u8BD5\u8349\u7A3F\u5DF2\u4FDD\u5B58\uFF0C\u6062\u590D\u68C0\u67E5\u7531\u5DE5\u4F5C\u53F0\u7EE7\u7EED\u5B8C\u6210\uFF1B\u8BF7\u52FF\u53D1\u9001\u3002" : "\u672C\u673A\u9A8C\u6536\u6A21\u5F0F \xB7 \u8BF7\u628A\u84DD\u8272\u62D6\u52A8\u67C4\u62D6\u5230\u53E6\u4E00\u9762\u677F\u5185\uFF0C\u518D\u62D6\u52A8\u84DD\u8272\u7AD6\u7EBF\uFF1B\u65E0\u9700\u8F93\u5165\u6216\u53D1\u9001\u6D88\u606F\u3002"), preview && /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-banner rw-preview-banner" }, /* @__PURE__ */ import_react12.default.createElement("span", null, "\u754C\u9762\u9884\u89C8 \xB7 \u5408\u6210\u5B9E\u9A8C\u6837\u4F8B"), /* @__PURE__ */ import_react12.default.createElement("span", null, "\u4EC5\u672C\u673A")), project?.workspace?.checkpointError && /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-banner", role: "alert" }, project.workspace.checkpointError), error && /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-banner", "data-error": "true", role: "alert" }, /* @__PURE__ */ import_react12.default.createElement("span", null, error), /* @__PURE__ */ import_react12.default.createElement("button", { "aria-label": "\u5173\u95ED\u9519\u8BEF\u63D0\u793A", className: "rw-icon-button", onClick: () => setError("") }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "close", size: 13 }))), /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-body" }, /* @__PURE__ */ import_react12.default.createElement(WorkbenchSidebar, { collapsed: sidebarCollapsed, project, task, object, onNewProject: openNewProject, onProjects: () => setModal("projects"), onOpenWorkspace: () => {
+  })() }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "arrow", size: 16 })))), state.nativeAcceptance && /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-banner", role: "status" }, state.nativeAcceptance.mode === "restore" ? "\u672C\u673A\u9A8C\u6536\u6A21\u5F0F \xB7 \u6D4B\u8BD5\u8349\u7A3F\u5DF2\u4FDD\u5B58\uFF0C\u6062\u590D\u68C0\u67E5\u7531\u5DE5\u4F5C\u53F0\u7EE7\u7EED\u5B8C\u6210\uFF1B\u8BF7\u52FF\u53D1\u9001\u3002" : "\u672C\u673A\u9A8C\u6536\u6A21\u5F0F \xB7 \u8BF7\u628A\u84DD\u8272\u62D6\u52A8\u67C4\u62D6\u5230\u53E6\u4E00\u9762\u677F\u5185\uFF0C\u518D\u62D6\u52A8\u84DD\u8272\u7AD6\u7EBF\uFF1B\u65E0\u9700\u8F93\u5165\u6216\u53D1\u9001\u6D88\u606F\u3002"), preview && /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-banner rw-preview-banner" }, /* @__PURE__ */ import_react11.default.createElement("span", null, "\u754C\u9762\u9884\u89C8 \xB7 \u5408\u6210\u5B9E\u9A8C\u6837\u4F8B"), /* @__PURE__ */ import_react11.default.createElement("span", null, "\u4EC5\u672C\u673A")), project?.workspace?.checkpointError && /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-banner", role: "alert" }, project.workspace.checkpointError), error && /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-banner", "data-error": "true", role: "alert" }, /* @__PURE__ */ import_react11.default.createElement("span", null, error), /* @__PURE__ */ import_react11.default.createElement("button", { "aria-label": "\u5173\u95ED\u9519\u8BEF\u63D0\u793A", className: "rw-icon-button", onClick: () => setError("") }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "close", size: 13 }))), /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-body" }, /* @__PURE__ */ import_react11.default.createElement(WorkbenchSidebar, { collapsed: sidebarCollapsed, project, task, object, onNewProject: openNewProject, onProjects: () => setModal("projects"), onOpenWorkspace: () => {
     setForm({ path: "", title: "" });
     setModal("open-workspace");
-  }, onFiles: () => setModal("workspace-files"), onTask: (key) => void changeTask(key), onNote: () => void addNote(), onSelect: (item) => void selectObject(item), onImport: () => importRef.current.click(), onResources: () => setModal("resources") }), /* @__PURE__ */ import_react12.default.createElement("input", { ref: importRef, hidden: true, type: "file", accept: ".md,.markdown,.txt", "aria-label": "\u5BFC\u5165 Markdown \u6587\u4EF6", onChange: (event) => void importMarkdown(event) }), /* @__PURE__ */ import_react12.default.createElement("main", { className: "rw-workspace" }, project ? /* @__PURE__ */ import_react12.default.createElement(import_react12.default.Fragment, null, /* @__PURE__ */ import_react12.default.createElement(Dock, { task, layout, onLayout: (value, event) => void safe(() => persistView({ layout: value, ...event ? { layoutEvent: event } : {} }))() }, { main: content, context: context2, chat })) : /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-empty" }, /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-empty-mark" }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "brand", size: 31 })), /* @__PURE__ */ import_react12.default.createElement("div", null, /* @__PURE__ */ import_react12.default.createElement("h1", null, "\u8BA9\u4E00\u4E2A\u7814\u7A76\u95EE\u9898\uFF0C\u6210\u4E3A\u4E00\u7BC7\u8BBA\u6587\u3002"), /* @__PURE__ */ import_react12.default.createElement("p", null, loading ? "\u6B63\u5728\u6253\u5F00\u672C\u673A\u5DE5\u4F5C\u53F0\u2026" : "\u628A\u8BBA\u8BC1\u3001\u6570\u636E\u3001\u56FE\u8868\u548C\u6587\u732E\u653E\u56DE\u540C\u4E00\u5904\u3002\u6BCF\u4E2A\u4EFB\u52A1\u4FDD\u7559\u81EA\u5DF1\u7684\u5BF9\u8BDD\uFF0C\u6BCF\u4E2A\u9879\u76EE\u4FDD\u7559\u81EA\u5DF1\u7684\u7814\u7A76\u73B0\u573A\u3002")), /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-empty-buttons" }, /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-primary", onClick: openNewProject }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "plus", size: 15 }), "\u65B0\u5EFA\u8BBA\u6587\u9879\u76EE"), /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-secondary", onClick: () => void createProject(true) }, "\u6253\u5F00\u5B9E\u9A8C\u793A\u4F8B", /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "arrow", size: 14 })))))), notice && /* @__PURE__ */ import_react12.default.createElement("div", { role: "status", className: "rw-toast" }, notice), ["new", "edit"].includes(modal) && /* @__PURE__ */ import_react12.default.createElement(Modal, { title: modal === "edit" ? "\u9879\u76EE\u4FE1\u606F" : "\u65B0\u5EFA\u8BBA\u6587\u9879\u76EE", onClose: () => setModal(null), footer: /* @__PURE__ */ import_react12.default.createElement(import_react12.default.Fragment, null, /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-quiet", onClick: () => setModal(null) }, "\u53D6\u6D88"), /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-primary", disabled: !form.title.trim(), onClick: () => void (modal === "edit" ? editProject() : createProject(false)) }, modal === "edit" ? "\u4FDD\u5B58\u9879\u76EE\u4FE1\u606F" : "\u521B\u5EFA\u9879\u76EE", /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "arrow", size: 14 }))) }, /* @__PURE__ */ import_react12.default.createElement("label", null, "\u9879\u76EE\u540D\u79F0", /* @__PURE__ */ import_react12.default.createElement("input", { autoFocus: true, placeholder: "\u4F8B\u5982\uFF1A\u5206\u7EC4\u5E72\u9884\u4E0E\u65F6\u5E8F\u54CD\u5E94", maxLength: 120, value: form.title, onChange: (event) => setForm({ ...form, title: event.target.value }) })), /* @__PURE__ */ import_react12.default.createElement("label", null, "\u4FDD\u5B58\u4F4D\u7F6E", /* @__PURE__ */ import_react12.default.createElement("input", { "aria-label": "\u9879\u76EE\u4FDD\u5B58\u4F4D\u7F6E", placeholder: "\u4F7F\u7528\u5DE5\u4F5C\u53F0\u9ED8\u8BA4\u4F4D\u7F6E", readOnly: modal === "edit", value: modal === "edit" ? project.rootPath : form.workspacePath || "", onChange: (event) => setForm({ ...form, workspacePath: event.target.value }) })), /* @__PURE__ */ import_react12.default.createElement("label", null, "\u7814\u7A76\u95EE\u9898", /* @__PURE__ */ import_react12.default.createElement("textarea", { placeholder: "\u8FD9\u4E2A\u7814\u7A76\u8BD5\u56FE\u56DE\u7B54\u4EC0\u4E48\uFF1F\u53EF\u4EE5\u7A0D\u540E\u8865\u5145\u3002", value: form.question, onChange: (event) => setForm({ ...form, question: event.target.value }) })), /* @__PURE__ */ import_react12.default.createElement("div", { style: { display: "flex", gap: 14 } }, /* @__PURE__ */ import_react12.default.createElement("label", { style: { flex: 1 } }, "\u76EE\u6807\u671F\u520A", /* @__PURE__ */ import_react12.default.createElement("input", { placeholder: "\u53EF\u7A0D\u540E\u586B\u5199", value: form.journal, onChange: (event) => setForm({ ...form, journal: event.target.value }) })), /* @__PURE__ */ import_react12.default.createElement("label", { style: { width: 115 } }, "\u7A3F\u4EF6\u8BED\u8A00", /* @__PURE__ */ import_react12.default.createElement("select", { value: form.language, onChange: (event) => setForm({ ...form, language: event.target.value }) }, /* @__PURE__ */ import_react12.default.createElement("option", { value: "zh" }, "\u4E2D\u6587"), /* @__PURE__ */ import_react12.default.createElement("option", { value: "en" }, "English")))), /* @__PURE__ */ import_react12.default.createElement("p", { className: "rw-context-muted" }, "\u6BCF\u4E2A\u9879\u76EE\u72EC\u7ACB\u4FDD\u5B58\u6B63\u6587\u3001\u8D44\u6599\u3001\u5E03\u5C40\u4E0E\u4E09\u4E2A\u4EFB\u52A1\u4F1A\u8BDD\u3002\u76EE\u5F55\u7F3A\u5931\u65F6\u81EA\u52A8\u521B\u5EFA\uFF0C\u5DF2\u6709\u76EE\u5F55\u901A\u8FC7\u201C\u6253\u5F00\u5DF2\u6709\u5DE5\u4F5C\u533A\u201D\u5173\u8054\u3002\u6B63\u6587\u3001\u56FE\u8868\u3001\u6570\u636E\u3001\u53C2\u8003\u6587\u732E\u548C\u8FC7\u7A0B\u6587\u4EF6\u6309\u76EE\u5F55\u5206\u7C7B\u4FDD\u5B58\u3002")), modal === "projects" && /* @__PURE__ */ import_react12.default.createElement(Modal, { title: "\u4F60\u7684\u7814\u7A76\u9879\u76EE", onClose: () => setModal(null), footer: /* @__PURE__ */ import_react12.default.createElement(import_react12.default.Fragment, null, project && /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-quiet", onClick: () => {
+  }, onFiles: () => setModal("workspace-files"), onTask: (key) => void changeTask(key), onNote: () => void addNote(), onSelect: (item) => void selectObject(item), onImport: () => importRef.current.click(), onResources: () => setModal("resources") }), /* @__PURE__ */ import_react11.default.createElement("input", { ref: importRef, hidden: true, type: "file", accept: ".md,.markdown,.txt", "aria-label": "\u5BFC\u5165 Markdown \u6587\u4EF6", onChange: (event) => void importMarkdown(event) }), /* @__PURE__ */ import_react11.default.createElement("main", { className: "rw-workspace" }, project ? /* @__PURE__ */ import_react11.default.createElement(import_react11.default.Fragment, null, /* @__PURE__ */ import_react11.default.createElement(Dock, { task, layout, onLayout: (value, event) => void safe(() => persistView({ layout: value, ...event ? { layoutEvent: event } : {} }))() }, { main: content, context: context2, chat })) : /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-empty" }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-empty-mark" }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "brand", size: 31 })), /* @__PURE__ */ import_react11.default.createElement("div", null, /* @__PURE__ */ import_react11.default.createElement("h1", null, "\u8BA9\u4E00\u4E2A\u7814\u7A76\u95EE\u9898\uFF0C\u6210\u4E3A\u4E00\u7BC7\u8BBA\u6587\u3002"), /* @__PURE__ */ import_react11.default.createElement("p", null, loading ? "\u6B63\u5728\u6253\u5F00\u672C\u673A\u5DE5\u4F5C\u53F0\u2026" : "\u628A\u8BBA\u8BC1\u3001\u6570\u636E\u3001\u56FE\u8868\u548C\u6587\u732E\u653E\u56DE\u540C\u4E00\u5904\u3002\u6BCF\u4E2A\u4EFB\u52A1\u4FDD\u7559\u81EA\u5DF1\u7684\u5BF9\u8BDD\uFF0C\u6BCF\u4E2A\u9879\u76EE\u4FDD\u7559\u81EA\u5DF1\u7684\u7814\u7A76\u73B0\u573A\u3002")), /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-empty-buttons" }, /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-primary", onClick: openNewProject }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "plus", size: 15 }), "\u65B0\u5EFA\u8BBA\u6587\u9879\u76EE"), /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-secondary", onClick: () => void createProject(true) }, "\u6253\u5F00\u5B9E\u9A8C\u793A\u4F8B", /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "arrow", size: 14 })))))), notice && /* @__PURE__ */ import_react11.default.createElement("div", { role: "status", className: "rw-toast" }, notice), ["new", "edit"].includes(modal) && /* @__PURE__ */ import_react11.default.createElement(Modal, { title: modal === "edit" ? "\u9879\u76EE\u4FE1\u606F" : "\u65B0\u5EFA\u8BBA\u6587\u9879\u76EE", onClose: () => setModal(null), footer: /* @__PURE__ */ import_react11.default.createElement(import_react11.default.Fragment, null, /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-quiet", onClick: () => setModal(null) }, "\u53D6\u6D88"), /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-primary", disabled: !form.title.trim(), onClick: () => void (modal === "edit" ? editProject() : createProject(false)) }, modal === "edit" ? "\u4FDD\u5B58\u9879\u76EE\u4FE1\u606F" : "\u521B\u5EFA\u9879\u76EE", /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "arrow", size: 14 }))) }, /* @__PURE__ */ import_react11.default.createElement("label", null, "\u9879\u76EE\u540D\u79F0", /* @__PURE__ */ import_react11.default.createElement("input", { autoFocus: true, placeholder: "\u4F8B\u5982\uFF1A\u5206\u7EC4\u5E72\u9884\u4E0E\u65F6\u5E8F\u54CD\u5E94", maxLength: 120, value: form.title, onChange: (event) => setForm({ ...form, title: event.target.value }) })), /* @__PURE__ */ import_react11.default.createElement("label", null, "\u4FDD\u5B58\u4F4D\u7F6E", /* @__PURE__ */ import_react11.default.createElement("input", { "aria-label": "\u9879\u76EE\u4FDD\u5B58\u4F4D\u7F6E", placeholder: "\u4F7F\u7528\u5DE5\u4F5C\u53F0\u9ED8\u8BA4\u4F4D\u7F6E", readOnly: modal === "edit", value: modal === "edit" ? project.rootPath : form.workspacePath || "", onChange: (event) => setForm({ ...form, workspacePath: event.target.value }) })), /* @__PURE__ */ import_react11.default.createElement("label", null, "\u7814\u7A76\u95EE\u9898", /* @__PURE__ */ import_react11.default.createElement("textarea", { placeholder: "\u8FD9\u4E2A\u7814\u7A76\u8BD5\u56FE\u56DE\u7B54\u4EC0\u4E48\uFF1F\u53EF\u4EE5\u7A0D\u540E\u8865\u5145\u3002", value: form.question, onChange: (event) => setForm({ ...form, question: event.target.value }) })), /* @__PURE__ */ import_react11.default.createElement("div", { style: { display: "flex", gap: 14 } }, /* @__PURE__ */ import_react11.default.createElement("label", { style: { flex: 1 } }, "\u76EE\u6807\u671F\u520A", /* @__PURE__ */ import_react11.default.createElement("input", { placeholder: "\u53EF\u7A0D\u540E\u586B\u5199", value: form.journal, onChange: (event) => setForm({ ...form, journal: event.target.value }) })), /* @__PURE__ */ import_react11.default.createElement("label", { style: { width: 115 } }, "\u7A3F\u4EF6\u8BED\u8A00", /* @__PURE__ */ import_react11.default.createElement("select", { value: form.language, onChange: (event) => setForm({ ...form, language: event.target.value }) }, /* @__PURE__ */ import_react11.default.createElement("option", { value: "zh" }, "\u4E2D\u6587"), /* @__PURE__ */ import_react11.default.createElement("option", { value: "en" }, "English")))), /* @__PURE__ */ import_react11.default.createElement("p", { className: "rw-context-muted" }, "\u6BCF\u4E2A\u9879\u76EE\u72EC\u7ACB\u4FDD\u5B58\u6B63\u6587\u3001\u8D44\u6599\u3001\u5E03\u5C40\u4E0E\u4E09\u4E2A\u4EFB\u52A1\u4F1A\u8BDD\u3002\u76EE\u5F55\u7F3A\u5931\u65F6\u81EA\u52A8\u521B\u5EFA\uFF0C\u5DF2\u6709\u76EE\u5F55\u901A\u8FC7\u201C\u6253\u5F00\u5DF2\u6709\u5DE5\u4F5C\u533A\u201D\u5173\u8054\u3002\u6B63\u6587\u3001\u56FE\u8868\u3001\u6570\u636E\u3001\u53C2\u8003\u6587\u732E\u548C\u8FC7\u7A0B\u6587\u4EF6\u6309\u76EE\u5F55\u5206\u7C7B\u4FDD\u5B58\u3002")), modal === "projects" && /* @__PURE__ */ import_react11.default.createElement(Modal, { title: "\u4F60\u7684\u7814\u7A76\u9879\u76EE", onClose: () => setModal(null), footer: /* @__PURE__ */ import_react11.default.createElement(import_react11.default.Fragment, null, project && /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-quiet", onClick: () => {
     setForm({ title: project.title, question: project.question, journal: project.journal, language: project.language });
     setModal("edit");
-  } }, "\u9879\u76EE\u4FE1\u606F"), /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-quiet", onClick: () => void createProject(true) }, "\u6253\u5F00\u5B9E\u9A8C\u793A\u4F8B"), /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-primary", onClick: openNewProject }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "plus", size: 14 }), "\u65B0\u5EFA\u9879\u76EE")) }, state.projects.length ? state.projects.map((item) => /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-project-entry", key: item.id }, /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-project-row", "aria-current": item.id === project?.id, onClick: () => void changeProject(item.id) }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "folder", size: 20 }), /* @__PURE__ */ import_react12.default.createElement("span", null, /* @__PURE__ */ import_react12.default.createElement("strong", null, item.title), /* @__PURE__ */ import_react12.default.createElement("small", null, TASK_LABELS[item.activeTask], " \xB7 ", date(item.updatedAt), item.isDemo ? " \xB7 \u5408\u6210\u5B9E\u9A8C\u793A\u4F8B" : "")), item.id === project?.id && /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "check", size: 17 })), /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-icon-button rw-project-delete", "aria-label": `\u5220\u9664\u9879\u76EE\uFF1A${item.title}`, title: "\u4ECE\u5217\u8868\u5220\u9664\uFF0C\u4FDD\u7559\u78C1\u76D8\u6587\u4EF6", onClick: () => {
+  } }, "\u9879\u76EE\u4FE1\u606F"), /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-quiet", onClick: () => void createProject(true) }, "\u6253\u5F00\u5B9E\u9A8C\u793A\u4F8B"), /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-primary", onClick: openNewProject }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "plus", size: 14 }), "\u65B0\u5EFA\u9879\u76EE")) }, state.projects.length ? state.projects.map((item) => /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-project-entry", key: item.id }, /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-project-row", "aria-current": item.id === project?.id, onClick: () => void changeProject(item.id) }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "folder", size: 20 }), /* @__PURE__ */ import_react11.default.createElement("span", null, /* @__PURE__ */ import_react11.default.createElement("strong", null, item.title), /* @__PURE__ */ import_react11.default.createElement("small", null, TASK_LABELS[item.activeTask], " \xB7 ", date(item.updatedAt), item.isDemo ? " \xB7 \u5408\u6210\u5B9E\u9A8C\u793A\u4F8B" : "")), item.id === project?.id && /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "check", size: 17 })), /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-icon-button rw-project-delete", "aria-label": `\u5220\u9664\u9879\u76EE\uFF1A${item.title}`, title: "\u4ECE\u5217\u8868\u5220\u9664\uFF0C\u4FDD\u7559\u78C1\u76D8\u6587\u4EF6", onClick: () => {
     setProjectToRemove(item);
     setRemovalError("");
     setModal("remove-project");
-  } }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "trash", size: 15 })))) : /* @__PURE__ */ import_react12.default.createElement("p", { className: "rw-context-muted" }, "\u8FD8\u6CA1\u6709\u7814\u7A76\u9879\u76EE\u3002\u521B\u5EFA\u4E00\u7BC7\u8BBA\u6587\uFF0C\u6216\u5148\u6253\u5F00\u5408\u6210\u5B9E\u9A8C\u793A\u4F8B\u3002")), modal === "remove-project" && projectToRemove && /* @__PURE__ */ import_react12.default.createElement(Modal, { title: "\u5220\u9664\u8FD9\u4E2A\u7814\u7A76\u9879\u76EE\uFF1F", onClose: () => {
+  } }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "trash", size: 15 })))) : /* @__PURE__ */ import_react11.default.createElement("p", { className: "rw-context-muted" }, "\u8FD8\u6CA1\u6709\u7814\u7A76\u9879\u76EE\u3002\u521B\u5EFA\u4E00\u7BC7\u8BBA\u6587\uFF0C\u6216\u5148\u6253\u5F00\u5408\u6210\u5B9E\u9A8C\u793A\u4F8B\u3002")), modal === "remove-project" && projectToRemove && /* @__PURE__ */ import_react11.default.createElement(Modal, { title: "\u5220\u9664\u8FD9\u4E2A\u7814\u7A76\u9879\u76EE\uFF1F", onClose: () => {
     if (!removingProject) setModal("projects");
-  }, footer: /* @__PURE__ */ import_react12.default.createElement(import_react12.default.Fragment, null, /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-quiet", disabled: removingProject, onClick: () => setModal("projects") }, "\u53D6\u6D88"), /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-primary", disabled: removingProject, onClick: () => void removeProject() }, removingProject ? "\u6B63\u5728\u5220\u9664\u2026" : "\u4ECE\u5217\u8868\u5220\u9664")) }, /* @__PURE__ */ import_react12.default.createElement("p", { className: "rw-project-remove-title" }, projectToRemove.title), /* @__PURE__ */ import_react12.default.createElement("p", { className: "rw-context-muted" }, "\u53EA\u4ECE\u5DE5\u4F5C\u53F0\u9879\u76EE\u5217\u8868\u79FB\u9664\u3002\u78C1\u76D8\u4E0A\u7684\u539F\u7A3F\u3001\u5DE5\u4F5C\u526F\u672C\u3001\u8D44\u6599\u4E0E Git \u5386\u53F2\u5747\u4FDD\u7559\uFF0C\u4E0D\u5220\u9664\u539F\u751F\u5BF9\u8BDD\u3002\u4EE5\u540E\u53EF\u4EE5\u901A\u8FC7\u201C\u6253\u5F00\u5DF2\u6709\u5DE5\u4F5C\u533A\u201D\u91CD\u65B0\u6DFB\u52A0\u3002"), /* @__PURE__ */ import_react12.default.createElement("p", { className: "rw-project-remove-path" }, projectToRemove.rootPath), removalError && /* @__PURE__ */ import_react12.default.createElement("p", { className: "rw-error-text", role: "alert" }, removalError)), modal === "open-workspace" && /* @__PURE__ */ import_react12.default.createElement(Modal, { title: "\u6253\u5F00\u5DF2\u6709\u8BBA\u6587\u5DE5\u4F5C\u533A", onClose: () => setModal(null), footer: /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-primary", disabled: !form.path?.trim(), onClick: () => void safe(async () => {
+  }, footer: /* @__PURE__ */ import_react11.default.createElement(import_react11.default.Fragment, null, /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-quiet", disabled: removingProject, onClick: () => setModal("projects") }, "\u53D6\u6D88"), /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-primary", disabled: removingProject, onClick: () => void removeProject() }, removingProject ? "\u6B63\u5728\u5220\u9664\u2026" : "\u4ECE\u5217\u8868\u5220\u9664")) }, /* @__PURE__ */ import_react11.default.createElement("p", { className: "rw-project-remove-title" }, projectToRemove.title), /* @__PURE__ */ import_react11.default.createElement("p", { className: "rw-context-muted" }, "\u53EA\u4ECE\u5DE5\u4F5C\u53F0\u9879\u76EE\u5217\u8868\u79FB\u9664\u3002\u78C1\u76D8\u4E0A\u7684\u539F\u7A3F\u3001\u5DE5\u4F5C\u526F\u672C\u3001\u8D44\u6599\u4E0E Git \u5386\u53F2\u5747\u4FDD\u7559\uFF0C\u4E0D\u5220\u9664\u539F\u751F\u5BF9\u8BDD\u3002\u4EE5\u540E\u53EF\u4EE5\u901A\u8FC7\u201C\u6253\u5F00\u5DF2\u6709\u5DE5\u4F5C\u533A\u201D\u91CD\u65B0\u6DFB\u52A0\u3002"), /* @__PURE__ */ import_react11.default.createElement("p", { className: "rw-project-remove-path" }, projectToRemove.rootPath), removalError && /* @__PURE__ */ import_react11.default.createElement("p", { className: "rw-error-text", role: "alert" }, removalError)), modal === "open-workspace" && /* @__PURE__ */ import_react11.default.createElement(Modal, { title: "\u6253\u5F00\u5DF2\u6709\u8BBA\u6587\u5DE5\u4F5C\u533A", onClose: () => setModal(null), footer: /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-primary", disabled: !form.path?.trim(), onClick: () => void safe(async () => {
     await saveAll();
     await mutate("openWorkspace", { path: form.path.trim(), title: form.title?.trim() || void 0 });
     setModal(null);
-  })() }, "\u5173\u8054\u5E76\u6253\u5F00") }, /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-form" }, /* @__PURE__ */ import_react12.default.createElement("label", null, "\u8BBA\u6587\u6839\u76EE\u5F55", /* @__PURE__ */ import_react12.default.createElement("input", { autoFocus: true, value: form.path || "", onChange: (event) => setForm({ ...form, path: event.target.value }), placeholder: "D:\\Research\\MyPaper" })), /* @__PURE__ */ import_react12.default.createElement("p", { className: "rw-context-muted" }, "\u81EA\u52A8\u5339\u914D paper\u3001picture\u3001Data\u3001reference\u3001temp\uFF1B\u7F3A\u5931\u76EE\u5F55\u81EA\u52A8\u521B\u5EFA\uFF0C\u4FDD\u7559\u65E2\u6709 .git \u548C\u6587\u4EF6\u3002"))), modal === "resources" && project && /* @__PURE__ */ import_react12.default.createElement(Modal, { title: "\u9879\u76EE\u8D44\u6599", onClose: () => setModal(null), footer: /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-secondary", onClick: () => {
+  })() }, "\u5173\u8054\u5E76\u6253\u5F00") }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-form" }, /* @__PURE__ */ import_react11.default.createElement("label", null, "\u8BBA\u6587\u6839\u76EE\u5F55", /* @__PURE__ */ import_react11.default.createElement("input", { autoFocus: true, value: form.path || "", onChange: (event) => setForm({ ...form, path: event.target.value }), placeholder: "D:\\Research\\MyPaper" })), /* @__PURE__ */ import_react11.default.createElement("p", { className: "rw-context-muted" }, "\u81EA\u52A8\u5339\u914D paper\u3001picture\u3001Data\u3001reference\u3001temp\uFF1B\u7F3A\u5931\u76EE\u5F55\u81EA\u52A8\u521B\u5EFA\uFF0C\u4FDD\u7559\u65E2\u6709 .git \u548C\u6587\u4EF6\u3002"))), modal === "resources" && project && /* @__PURE__ */ import_react11.default.createElement(Modal, { title: "\u9879\u76EE\u8D44\u6599", onClose: () => setModal(null), footer: /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-secondary", onClick: () => {
     setModal(null);
     importRef.current.click();
-  } }, "\u5BFC\u5165 Markdown") }, project.objects.map((item) => /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-project-row", key: item.id, title: item.metadata?.workspaceFile || item.title, onClick: async () => {
+  } }, "\u5BFC\u5165 Markdown") }, project.objects.map((item) => /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-project-row", key: item.id, title: item.metadata?.workspaceFile || item.title, onClick: async () => {
     await selectObject(item);
     setModal(null);
-  } }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: item.kind === "data" ? "data" : item.kind === "figure" ? "figure" : "file", size: 17 }), /* @__PURE__ */ import_react12.default.createElement("span", null, /* @__PURE__ */ import_react12.default.createElement("strong", null, item.title), /* @__PURE__ */ import_react12.default.createElement("small", null, KINDS[item.kind], " \xB7 v", item.revision)), item.id === object?.id && /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "check", size: 15 })))), modal === "workspace-files" && project && /* @__PURE__ */ import_react12.default.createElement(Modal, { title: "\u8BBA\u6587\u5DE5\u4F5C\u533A\u6587\u4EF6", onClose: () => setModal(null) }, /* @__PURE__ */ import_react12.default.createElement(WorkspaceBrowser, { api: api2, project, onRefresh: async () => {
+  } }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: item.kind === "data" ? "data" : item.kind === "figure" ? "figure" : "file", size: 17 }), /* @__PURE__ */ import_react11.default.createElement("span", null, /* @__PURE__ */ import_react11.default.createElement("strong", null, item.title), /* @__PURE__ */ import_react11.default.createElement("small", null, KINDS[item.kind], " \xB7 v", item.revision)), item.id === object?.id && /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "check", size: 15 })))), modal === "workspace-files" && project && /* @__PURE__ */ import_react11.default.createElement(Modal, { title: "\u8BBA\u6587\u5DE5\u4F5C\u533A\u6587\u4EF6", onClose: () => setModal(null) }, /* @__PURE__ */ import_react11.default.createElement(WorkspaceBrowser, { api: api2, project, onRefresh: async () => {
     await saveAll();
     await mutate("refreshWorkspace", { projectId: project.id });
   }, onReveal: () => void safe(() => mutate("openWorkspaceFile", { projectId: project.id }))(), onSelect: async (entry) => {
@@ -46194,11 +46560,11 @@ function App({ api: api2, nativeRender, nativeSentenceRender, onLeave = null, pr
     await mutate("saveTaskState", { projectId: project.id, task: targetTask, patch: { selectedObjectId: selected.id, scrollTop: 0 } });
     await mutate("updateProject", { projectId: project.id, patch: { activeTask: targetTask } });
     setModal(null);
-  } })), modal === "history" && /* @__PURE__ */ import_react12.default.createElement(Modal, { title: object.kind === "manuscript" ? "\u6587\u6863 Git \u5386\u53F2" : "\u4FDD\u5B58\u7684\u5185\u5BB9\u7248\u672C", onClose: () => setModal(null) }, object.kind === "manuscript" ? /* @__PURE__ */ import_react12.default.createElement(DocumentHistory, { api: api2, project, object, onRestore: async (commit) => {
+  } })), modal === "history" && /* @__PURE__ */ import_react11.default.createElement(Modal, { title: object.kind === "manuscript" ? "\u6587\u6863 Git \u5386\u53F2" : "\u4FDD\u5B58\u7684\u5185\u5BB9\u7248\u672C", onClose: () => setModal(null) }, object.kind === "manuscript" ? /* @__PURE__ */ import_react11.default.createElement(DocumentHistory, { api: api2, project, object, onRestore: async (commit) => {
     await saveAll();
     const saved = current.current.projects.find((p) => p.id === project.id).objects.find((o) => o.id === object.id);
     await mutate("restoreDocumentHistory", { projectId: project.id, objectId: object.id, commit, expectedRevision: saved.revision });
-  } }) : history2.map((version2) => /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-history-row", key: version2.revision }, /* @__PURE__ */ import_react12.default.createElement("strong", null, isWord ? version2.revision === object.revision && object.metadata?.wordEditable ? "\u5F53\u524D\u5DE5\u4F5C\u526F\u672C" : version2.revision === 1 ? "\u539F\u59CB\u6587\u7A3F" : `\u5DF2\u6709\u5B58\u6863 \xB7 \u4FEE\u8BA2 ${version2.revision}` : `\u7248\u672C ${version2.revision}`), /* @__PURE__ */ import_react12.default.createElement("p", null, date(version2.createdAt), " \xB7 ", version2.sha256.slice(0, 12))))), modal === "jobs" && /* @__PURE__ */ import_react12.default.createElement(Modal, { title: "\u540E\u53F0\u4EFB\u52A1", onClose: () => setModal(null), footer: project && /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-secondary", onClick: () => void safe(() => mutate("enqueueJob", { projectId: project.id, type: "project.integrity", operationKey: crypto.randomUUID() }))() }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "check", size: 14 }), "\u68C0\u67E5\u5F53\u524D\u9879\u76EE\u6587\u4EF6") }, state.projects.flatMap((owner) => (owner.jobs || []).map((job) => /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-job", key: job.id }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: job.status === "succeeded" ? "check" : "clock", size: 17 }), /* @__PURE__ */ import_react12.default.createElement("div", null, /* @__PURE__ */ import_react12.default.createElement("strong", null, job.type === "writing.sentence" ? "\u9009\u53E5\u4FEE\u6539" : "\u9879\u76EE\u6587\u4EF6\u68C0\u67E5"), /* @__PURE__ */ import_react12.default.createElement("small", null, owner.title), /* @__PURE__ */ import_react12.default.createElement("p", null, job.phase || job.status, job.error ? ` \xB7 ${job.error}` : "")), job.type !== "writing.sentence" && ["failed", "interrupted", "cancelled", "outdated"].includes(job.status) && /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-quiet", onClick: () => void safe(() => mutate("retryJob", { projectId: owner.id, jobId: job.id }))() }, "\u91CD\u8BD5"), ["queued", "running"].includes(job.status) && /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-quiet", onClick: () => void safe(() => mutate("cancelJob", { projectId: owner.id, jobId: job.id }))() }, "\u53D6\u6D88")))), !state.projects.some((p) => p.jobs?.length) && /* @__PURE__ */ import_react12.default.createElement("p", { className: "rw-context-muted" }, "\u6682\u65E0\u540E\u53F0\u4EFB\u52A1\u3002\u5207\u6362\u9879\u76EE\u4E0D\u4F1A\u4E2D\u65AD\u5DF2\u63D0\u4EA4\u7684\u5DE5\u4F5C\uFF1B\u5904\u7406\u7ED3\u679C\u4F1A\u4FDD\u5B58\u5728\u6240\u5C5E\u9879\u76EE\u3002")), modal === "about" && /* @__PURE__ */ import_react12.default.createElement(Modal, { title: "\u5173\u4E8E\u8FD9\u4E2A\u7814\u7A76\u73B0\u573A", onClose: () => setModal(null) }, /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-context-section" }, /* @__PURE__ */ import_react12.default.createElement("h3", null, "\u79D1\u7814\u5DE5\u4F5C\u53F0 \xB7 \u9879\u76EE\u4E0E\u4EFB\u52A1\u7A7A\u95F4"), /* @__PURE__ */ import_react12.default.createElement("p", { className: "rw-context-muted" }, "\u6BCF\u7BC7\u8BBA\u6587\u72EC\u7ACB\u5B58\u50A8\uFF0C\u5E03\u5C40\u548C\u4F1A\u8BDD\u6309\u9879\u76EE\u3001\u4EFB\u52A1\u6062\u590D\u3002\u5F53\u524D\u53EF\u4EE5\u7BA1\u7406\u9879\u76EE\u8D44\u6599\u3001\u4FDD\u5B58 Markdown \u8349\u7A3F\u548C\u7248\u672C\u3001\u67E5\u770B\u672C\u673A\u4EFB\u52A1\u3002")), /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-context-section" }, /* @__PURE__ */ import_react12.default.createElement("h3", null, "\u539F\u751F\u5BF9\u8BDD"), /* @__PURE__ */ import_react12.default.createElement("p", { className: "rw-context-muted" }, "\u5728 DSH \u4E2D\u6CBF\u7528\u5DF2\u6709\u6A21\u578B\u914D\u7F6E\u3002\u5BF9\u8BDD\u6682\u4E0D\u53EF\u7528\u65F6\uFF0C\u9879\u76EE\u8D44\u6599\u4ECD\u7136\u53EF\u4EE5\u67E5\u770B\u548C\u7F16\u8F91\u3002")), /* @__PURE__ */ import_react12.default.createElement("p", { className: "rw-context-muted" }, project?.rootPath || "\u65B0\u9879\u76EE\u4FDD\u5B58\u5728\u72EC\u7ACB\u79D1\u7814\u5DE5\u4F5C\u53F0\u76EE\u5F55\u3002"), /* @__PURE__ */ import_react12.default.createElement("p", { className: "rw-context-muted", style: { marginTop: 12 } }, "\u5199\u4F5C\u9875\u652F\u6301\u76F4\u63A5\u7F16\u8F91\u3001\u9009\u53E5\u6539\u5199\u3001\u5168\u6587\u4E0A\u4E0B\u6587\u4E0E\u6587\u732E\u68C0\u7D22\uFF0C\u5BF9\u7167\u91C7\u7528\u5E76\u4FDD\u7559\u7248\u672C\u3002\u5DF2\u89E3\u6790\u7684\u6587\u732E Markdown \u53EF\u5728\u9009\u53E5\u6D6E\u7A97\u4E2D\u52A0\u5165\u5171\u4EAB\u6587\u732E\u5E93\u3002"))));
+  } }) : history2.map((version2) => /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-history-row", key: version2.revision }, /* @__PURE__ */ import_react11.default.createElement("strong", null, isWord ? version2.revision === object.revision && object.metadata?.wordEditable ? "\u5F53\u524D\u5DE5\u4F5C\u526F\u672C" : version2.revision === 1 ? "\u539F\u59CB\u6587\u7A3F" : `\u5DF2\u6709\u5B58\u6863 \xB7 \u4FEE\u8BA2 ${version2.revision}` : `\u7248\u672C ${version2.revision}`), /* @__PURE__ */ import_react11.default.createElement("p", null, date(version2.createdAt), " \xB7 ", version2.sha256.slice(0, 12))))), modal === "jobs" && /* @__PURE__ */ import_react11.default.createElement(Modal, { title: "\u540E\u53F0\u4EFB\u52A1", onClose: () => setModal(null), footer: project && /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-secondary", onClick: () => void safe(() => mutate("enqueueJob", { projectId: project.id, type: "project.integrity", operationKey: crypto.randomUUID() }))() }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: "check", size: 14 }), "\u68C0\u67E5\u5F53\u524D\u9879\u76EE\u6587\u4EF6") }, state.projects.flatMap((owner) => (owner.jobs || []).map((job) => /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-job", key: job.id }, /* @__PURE__ */ import_react11.default.createElement(Icon, { name: job.status === "succeeded" ? "check" : "clock", size: 17 }), /* @__PURE__ */ import_react11.default.createElement("div", null, /* @__PURE__ */ import_react11.default.createElement("strong", null, job.type === "writing.sentence" ? "\u9009\u53E5\u4FEE\u6539" : "\u9879\u76EE\u6587\u4EF6\u68C0\u67E5"), /* @__PURE__ */ import_react11.default.createElement("small", null, owner.title), /* @__PURE__ */ import_react11.default.createElement("p", null, job.phase || job.status, job.error ? ` \xB7 ${job.error}` : "")), job.type !== "writing.sentence" && ["failed", "interrupted", "cancelled", "outdated"].includes(job.status) && /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-quiet", onClick: () => void safe(() => mutate("retryJob", { projectId: owner.id, jobId: job.id }))() }, "\u91CD\u8BD5"), ["queued", "running"].includes(job.status) && /* @__PURE__ */ import_react11.default.createElement("button", { className: "rw-quiet", onClick: () => void safe(() => mutate("cancelJob", { projectId: owner.id, jobId: job.id }))() }, "\u53D6\u6D88")))), !state.projects.some((p) => p.jobs?.length) && /* @__PURE__ */ import_react11.default.createElement("p", { className: "rw-context-muted" }, "\u6682\u65E0\u540E\u53F0\u4EFB\u52A1\u3002\u5207\u6362\u9879\u76EE\u4E0D\u4F1A\u4E2D\u65AD\u5DF2\u63D0\u4EA4\u7684\u5DE5\u4F5C\uFF1B\u5904\u7406\u7ED3\u679C\u4F1A\u4FDD\u5B58\u5728\u6240\u5C5E\u9879\u76EE\u3002")), modal === "about" && /* @__PURE__ */ import_react11.default.createElement(Modal, { title: "\u5173\u4E8E\u8FD9\u4E2A\u7814\u7A76\u73B0\u573A", onClose: () => setModal(null) }, /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-context-section" }, /* @__PURE__ */ import_react11.default.createElement("h3", null, "\u79D1\u7814\u5DE5\u4F5C\u53F0 \xB7 \u9879\u76EE\u4E0E\u4EFB\u52A1\u7A7A\u95F4"), /* @__PURE__ */ import_react11.default.createElement("p", { className: "rw-context-muted" }, "\u6BCF\u7BC7\u8BBA\u6587\u72EC\u7ACB\u5B58\u50A8\uFF0C\u5E03\u5C40\u548C\u4F1A\u8BDD\u6309\u9879\u76EE\u3001\u4EFB\u52A1\u6062\u590D\u3002\u5F53\u524D\u53EF\u4EE5\u7BA1\u7406\u9879\u76EE\u8D44\u6599\u3001\u4FDD\u5B58 Markdown \u8349\u7A3F\u548C\u7248\u672C\u3001\u67E5\u770B\u672C\u673A\u4EFB\u52A1\u3002")), /* @__PURE__ */ import_react11.default.createElement("div", { className: "rw-context-section" }, /* @__PURE__ */ import_react11.default.createElement("h3", null, "\u539F\u751F\u5BF9\u8BDD"), /* @__PURE__ */ import_react11.default.createElement("p", { className: "rw-context-muted" }, "\u5728 DSH \u4E2D\u6CBF\u7528\u5DF2\u6709\u6A21\u578B\u914D\u7F6E\u3002\u5BF9\u8BDD\u6682\u4E0D\u53EF\u7528\u65F6\uFF0C\u9879\u76EE\u8D44\u6599\u4ECD\u7136\u53EF\u4EE5\u67E5\u770B\u548C\u7F16\u8F91\u3002")), /* @__PURE__ */ import_react11.default.createElement("p", { className: "rw-context-muted" }, project?.rootPath || "\u65B0\u9879\u76EE\u4FDD\u5B58\u5728\u72EC\u7ACB\u79D1\u7814\u5DE5\u4F5C\u53F0\u76EE\u5F55\u3002"), /* @__PURE__ */ import_react11.default.createElement("p", { className: "rw-context-muted", style: { marginTop: 12 } }, "\u5199\u4F5C\u9875\u652F\u6301\u76F4\u63A5\u7F16\u8F91\u3001\u9009\u53E5\u6539\u5199\u3001\u5168\u6587\u4E0A\u4E0B\u6587\u4E0E\u6587\u732E\u68C0\u7D22\uFF0C\u5BF9\u7167\u91C7\u7528\u5E76\u4FDD\u7559\u7248\u672C\u3002\u5DF2\u89E3\u6790\u7684\u6587\u732E Markdown \u53EF\u5728\u9009\u53E5\u6D6E\u7A97\u4E2D\u52A0\u5165\u5171\u4EAB\u6587\u732E\u5E93\u3002"))));
 }
 
 // src/shared/wordcraft-version.mjs
@@ -46293,6 +46659,7 @@ var PREFIX = "/api/research-workbench";
 function createApi() {
   let tail = Promise.resolve();
   let generation = 0;
+  let watchSupported = true;
   const request = async (name, init2) => {
     const timeout = AbortSignal.timeout(name.startsWith("word?") ? 9e4 : init2?.body && /"(?:openWorkspace|refreshWorkspace|exportWord|saveFigureFromFiles|documentHistory|documentHistoryDetail|restoreDocumentHistory|reviewReminders|applySentence|undoSentence|saveObject|openFormattingConversation|previewWordFormatting|applyWordFormatting|undoWordFormatting)"/.test(init2.body) ? 12e4 : 15e3);
     const result = await fetch(`${PREFIX}/${name}`, { ...init2, signal: init2?.signal ? AbortSignal.any([init2.signal, timeout]) : timeout });
@@ -46303,14 +46670,16 @@ function createApi() {
       throw new Error("\u5DE5\u4F5C\u53F0\u670D\u52A1\u5C1A\u672A\u5C31\u7EEA\uFF0C\u8BF7\u91CD\u8F7D DSH \u540E\u91CD\u8BD5\u3002");
     }
     if (!result.ok) {
-      const error = new Error(body.error || "\u8D44\u6599\u4FDD\u5B58\u672A\u5B8C\u6210\uFF0C\u8F93\u5165\u4ECD\u4FDD\u7559\u3002");
-      error.code = body.code;
+      const staleSaveHost = body.code === "UNKNOWN_ACTION" && name === "mutate" && init2?.body && JSON.parse(init2.body).action === "editSentenceSuggestion";
+      const error = new Error(staleSaveHost ? "\u5F53\u524D DSH \u540E\u53F0\u5C1A\u672A\u52A0\u8F7D\u53E5\u5B50\u7F16\u8F91\u4FDD\u5B58\u63A5\u53E3\u3002\u8F93\u5165\u4ECD\u4FDD\u7559\uFF0C\u8BF7\u66F4\u65B0\u540E\u53F0\u670D\u52A1\u540E\u91CD\u8BD5\u4FDD\u5B58\u3002" : body.error || "\u8D44\u6599\u4FDD\u5B58\u672A\u5B8C\u6210\uFF0C\u8F93\u5165\u4ECD\u4FDD\u7559\u3002");
+      error.code = staleSaveHost ? "HOST_UPDATE_REQUIRED" : body.code;
       throw error;
     }
     return body;
   };
   return {
     wordcraftAssets: (signal) => loadWordcraftAssets(PREFIX, signal),
+    wordControl: (action, data) => request("word-control", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, data }) }),
     systemFontUrl: (id) => `${PREFIX}/asset?${new URLSearchParams({ systemFont: id })}`,
     saveWord(projectId, objectId, expectedRevision, bytes) {
       generation++;
@@ -46320,6 +46689,25 @@ function createApi() {
       return operation;
     },
     stamp: () => request("state?stamp=1"),
+    async watchState(stamp, signal) {
+      if (!watchSupported) {
+        await new Promise((resolve, reject) => {
+          signal?.throwIfAborted();
+          const abort = () => {
+            clearTimeout(timer);
+            reject(signal.reason);
+          }, timer = setTimeout(() => {
+            signal?.removeEventListener("abort", abort);
+            resolve();
+          }, 1e3);
+          signal?.addEventListener("abort", abort, { once: true });
+        });
+        return request("state?stamp=1", { signal });
+      }
+      const result = await request("state?" + new URLSearchParams({ watch: "1", stamp }), { signal });
+      if (result.watch !== true) watchSupported = false;
+      return result;
+    },
     workspaceTree: (projectId, directory = "", offset = 0) => request(`state?${new URLSearchParams({ tree: "1", projectId, directory, offset })}`),
     wordStatus: (projectId, objectId) => request(`state?${new URLSearchParams({ word: "1", projectId, objectId })}`),
     wordPage: (projectId, objectId, page, signal) => request(`asset?${new URLSearchParams({ word: "1", projectId, objectId, page })}`, { signal }),
@@ -46335,8 +46723,11 @@ function createApi() {
       return result;
     },
     mutate(action, data) {
-      generation++;
-      const operation = tail.then(() => request("mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, data }) }));
+      const readOnly = ["systemFonts", "reviewReminders", "documentHistoryDetail"].includes(action);
+      if (!readOnly) generation++;
+      const send = () => request("mutate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, data }) });
+      if (readOnly) return send();
+      const operation = tail.then(send);
       tail = operation.catch(() => {
       });
       return operation;
@@ -46567,6 +46958,7 @@ var NativeSentenceAdapter = class {
     if (!conversation || this.closed) return null;
     let record = this.records.get(job.id);
     if (!verify && record?.status === "ready" && record.sessionId === conversation.sessionId) return record;
+    if (!verify && job.nativeSessionId === conversation.sessionId && job.objectId === conversation.objectId && project.id === conversation.projectId) this.bindings.set(job.id, conversation.sessionId);
     try {
       if (verify || this.bindings.get(job.id) !== conversation.sessionId) await this.bind(project, job, conversation.sessionId, onBinding, { refresh: verify });
       if (this.closed || this.sessions !== service) return null;
@@ -46621,18 +47013,18 @@ function NativeBody(props) {
   const conversation = props.useConversation((value) => value);
   const input = props.useInput((value) => value);
   const workspaces = props.useWorkspaces((value) => value);
-  const seeded = import_react13.default.useRef(false);
+  const seeded = import_react12.default.useRef(false);
   const member = Boolean(workspaces?.items?.some((workspace) => workspace.sessionIds.includes(props.sessionId)));
-  import_react13.default.useEffect(() => {
+  import_react12.default.useEffect(() => {
     const result = seedNativeDraft({ mode: props.acceptance?.mode, marker: props.acceptance?.marker, draft: input?.draft, phase: input?.phase, workspaceMember: member, applied: seeded.current, actions: props.inputActions });
     if (result === "seeded") seeded.current = true;
   }, [props.acceptance?.mode, props.acceptance?.marker, input?.draft, input?.phase, member, props.inputActions]);
   const hero = session?.blank === true && !session?.promptAttempted && !conversation?.activeTargets?.size;
-  import_react13.default.useEffect(() => {
+  import_react12.default.useEffect(() => {
     host.markMounted(props.ownerKey, true);
     return () => host.markMounted(props.ownerKey, false);
   }, [props.ownerKey, props.sessionId]);
-  import_react13.default.useEffect(() => {
+  import_react12.default.useEffect(() => {
     const record = host.records.get(props.ownerKey);
     if (!record) return;
     record.nativeEvidence = { slotSessionId: props.sessionId, workspaceMember: member, inputPhase: input?.phase || null, draftMarker: acceptanceMarker(input?.draft), seededThisMount: seeded.current, fixtureMode: props.acceptance?.mode || null };
@@ -46640,22 +47032,22 @@ function NativeBody(props) {
   }, [props.ownerKey, props.sessionId, input?.draft, input?.phase, member, props.acceptance?.mode]);
   return props.renderFactorySlot("conversation.content", { variant: "embedded", phase: hero ? "hero" : "active", hero });
 }
-var NativeBoundary = class extends import_react13.default.Component {
+var NativeBoundary = class extends import_react12.default.Component {
   state = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };
   }
   render() {
-    return this.state.failed ? /* @__PURE__ */ import_react13.default.createElement("div", { className: "rw-native-failure", role: "status" }, "\u539F\u751F\u5BF9\u8BDD\u754C\u9762\u6682\u4E0D\u53EF\u7528\u3002\u9879\u76EE\u8D44\u6599\u4ECD\u53EF\u7F16\u8F91\uFF1B\u91CD\u8F7D DSH \u540E\u53EF\u6062\u590D\u540C\u4E00\u4F1A\u8BDD\u3002") : this.props.children;
+    return this.state.failed ? /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-native-failure", role: "status" }, "\u539F\u751F\u5BF9\u8BDD\u754C\u9762\u6682\u4E0D\u53EF\u7528\u3002\u9879\u76EE\u8D44\u6599\u4ECD\u53EF\u7F16\u8F91\uFF1B\u91CD\u8F7D DSH \u540E\u53EF\u6062\u590D\u540C\u4E00\u4F1A\u8BDD\u3002") : this.props.children;
   }
 };
 function NativeSessions({ info, SessionProvider, renderSlot }) {
-  import_react13.default.useSyncExternalStore(host.subscribe, host.getSnapshot);
+  import_react12.default.useSyncExternalStore(host.subscribe, host.getSnapshot);
   const ownerKey = `${info.project.id}:${info.task}`;
-  import_react13.default.useEffect(() => {
+  import_react12.default.useEffect(() => {
     if (host.sessions) void host.ensure(info.project, info.task, { onBinding: info.onBinding });
   }, [ownerKey, info.project.bindings[info.task], host.sessions]);
-  import_react13.default.useEffect(() => {
+  import_react12.default.useEffect(() => {
     if (!info.acceptance || !host.sessions) return;
     let cancelled = false;
     void (async () => {
@@ -46676,24 +47068,35 @@ function NativeSessions({ info, SessionProvider, renderSlot }) {
   }, [info.acceptance?.runId, info.acceptance?.mode, host.sessions]);
   const active = host.records.get(ownerKey);
   const available = typeof SessionProvider === "function" && Boolean(host.sessions);
-  return /* @__PURE__ */ import_react13.default.createElement(import_react13.default.Fragment, null, (!active || active.status !== "ready" || !available) && /* @__PURE__ */ import_react13.default.createElement("div", { className: "rw-chat-empty" }, /* @__PURE__ */ import_react13.default.createElement("div", { className: "rw-chat-symbol" }, /* @__PURE__ */ import_react13.default.createElement(Icon, { name: "chat", size: 23 })), /* @__PURE__ */ import_react13.default.createElement("h3", null, available ? active?.status === "failed" ? "\u7814\u7A76\u73B0\u573A\u4ECD\u7136\u4FDD\u7559" : `\u6B63\u5728\u6062\u590D${TASK_LABELS[info.task]}\u5BF9\u8BDD` : "\u539F\u751F\u5BF9\u8BDD\u6682\u4E0D\u53EF\u7528"), /* @__PURE__ */ import_react13.default.createElement("p", null, active?.error || (available ? "\u6CBF\u7528 DSH \u4E2D\u5DF2\u6709\u7684\u6A21\u578B\u914D\u7F6E\uFF0C\u4E0D\u4F1A\u81EA\u52A8\u53D1\u9001\u6D88\u606F\u3002" : "\u9879\u76EE\u8D44\u6599\u53EF\u72EC\u7ACB\u67E5\u770B\u548C\u7F16\u8F91\u3002DSH \u4F1A\u8BDD\u670D\u52A1\u6062\u590D\u540E\uFF0C\u53EF\u7EE7\u7EED\u540C\u4E00\u4EFB\u52A1\u3002")), available && active?.status === "failed" && /* @__PURE__ */ import_react13.default.createElement(import_react13.default.Fragment, null, /* @__PURE__ */ import_react13.default.createElement("button", { className: "rw-secondary", onClick: () => void host.ensure(info.project, info.task, { retry: true, onBinding: info.onBinding }) }, "\u91CD\u65B0\u8FDE\u63A5"), /* @__PURE__ */ import_react13.default.createElement("button", { className: "rw-quiet", onClick: () => void host.ensure(info.project, info.task, { replace: true, onBinding: info.onBinding }) }, "\u65B0\u5EFA\u6B64\u4EFB\u52A1\u5BF9\u8BDD"))), available && [...host.records.values()].filter((record) => record.ref && record.status === "ready").map((record) => /* @__PURE__ */ import_react13.default.createElement("div", { className: "rw-native-frame", "data-project-session": record.ownerKey, "data-native-session-id": record.sessionId, hidden: record.ownerKey !== ownerKey, key: record.sessionId }, /* @__PURE__ */ import_react13.default.createElement(NativeBoundary, { key: record.sessionId }, /* @__PURE__ */ import_react13.default.createElement(SessionProvider, { session: record.ref }, renderSlot(NS + ".session", { ownerKey: record.ownerKey, acceptance: info.acceptance?.entries.find((entry) => entry.projectId === record.projectId && entry.task === record.task) ? { mode: info.acceptance.mode, marker: info.acceptance.entries.find((entry) => entry.projectId === record.projectId && entry.task === record.task).marker } : null }, { only: "native" }))))));
+  return /* @__PURE__ */ import_react12.default.createElement(import_react12.default.Fragment, null, (!active || active.status !== "ready" || !available) && /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-chat-empty" }, /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-chat-symbol" }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "chat", size: 23 })), /* @__PURE__ */ import_react12.default.createElement("h3", null, available ? active?.status === "failed" ? "\u7814\u7A76\u73B0\u573A\u4ECD\u7136\u4FDD\u7559" : `\u6B63\u5728\u6062\u590D${TASK_LABELS[info.task]}\u5BF9\u8BDD` : "\u539F\u751F\u5BF9\u8BDD\u6682\u4E0D\u53EF\u7528"), /* @__PURE__ */ import_react12.default.createElement("p", null, active?.error || (available ? "\u6CBF\u7528 DSH \u4E2D\u5DF2\u6709\u7684\u6A21\u578B\u914D\u7F6E\uFF0C\u4E0D\u4F1A\u81EA\u52A8\u53D1\u9001\u6D88\u606F\u3002" : "\u9879\u76EE\u8D44\u6599\u53EF\u72EC\u7ACB\u67E5\u770B\u548C\u7F16\u8F91\u3002DSH \u4F1A\u8BDD\u670D\u52A1\u6062\u590D\u540E\uFF0C\u53EF\u7EE7\u7EED\u540C\u4E00\u4EFB\u52A1\u3002")), available && active?.status === "failed" && /* @__PURE__ */ import_react12.default.createElement(import_react12.default.Fragment, null, /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-secondary", onClick: () => void host.ensure(info.project, info.task, { retry: true, onBinding: info.onBinding }) }, "\u91CD\u65B0\u8FDE\u63A5"), /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-quiet", onClick: () => void host.ensure(info.project, info.task, { replace: true, onBinding: info.onBinding }) }, "\u65B0\u5EFA\u6B64\u4EFB\u52A1\u5BF9\u8BDD"))), available && [...host.records.values()].filter((record) => record.ref && record.status === "ready").map((record) => /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-native-frame", "data-project-session": record.ownerKey, "data-native-session-id": record.sessionId, hidden: record.ownerKey !== ownerKey, key: record.sessionId }, /* @__PURE__ */ import_react12.default.createElement(NativeBoundary, { key: record.sessionId }, /* @__PURE__ */ import_react12.default.createElement(SessionProvider, { session: record.ref }, renderSlot(NS + ".session", { ownerKey: record.ownerKey, acceptance: info.acceptance?.entries.find((entry) => entry.projectId === record.projectId && entry.task === record.task) ? { mode: info.acceptance.mode, marker: info.acceptance.entries.find((entry) => entry.projectId === record.projectId && entry.task === record.task).marker } : null }, { only: "native" }))))));
 }
 function Panel(props) {
-  return /* @__PURE__ */ import_react13.default.createElement(App, { api, onLeave: () => context.layout.selectPanel(null), nativeRender: (info) => /* @__PURE__ */ import_react13.default.createElement(NativeSessions, { info, SessionProvider: props.SessionProvider, renderSlot: props.renderSlot }), nativeSentenceRender: (info) => /* @__PURE__ */ import_react13.default.createElement(NativeSentenceConversation, { info, SessionProvider: props.SessionProvider, renderSlot: props.renderSlot }) });
+  return /* @__PURE__ */ import_react12.default.createElement(App, { api, onLeave: () => context.layout.selectPanel(null), nativeRender: (info) => /* @__PURE__ */ import_react12.default.createElement(NativeSessions, { info, SessionProvider: props.SessionProvider, renderSlot: props.renderSlot }), nativeSentenceRender: (info) => /* @__PURE__ */ import_react12.default.createElement(NativeSentenceConversation, { info, SessionProvider: props.SessionProvider, renderSlot: props.renderSlot }) });
 }
 function NativeSentenceBody(props) {
   const session = props.useSession((value) => value), conversation = props.useConversation((value) => value);
   const input = props.useInput((value) => value), workspaces = props.useWorkspaces((value) => value);
-  const [notice, setNotice] = import_react13.default.useState("");
-  const body = import_react13.default.useRef(null);
-  const preparedSelection = import_react13.default.useRef(null), automaticDraft = import_react13.default.useRef(null);
-  const [template, setTemplate] = import_react13.default.useState("scientific");
+  const [notice, setNotice] = import_react12.default.useState("");
+  const body = import_react12.default.useRef(null);
+  const preparedSelection = import_react12.default.useRef(null), automaticDraft = import_react12.default.useRef(null);
+  const [template, setTemplate] = import_react12.default.useState("scientific");
   const templatePrompt = PROMPT_TEMPLATES.find((item) => item.id === template).prompt;
   const member = Boolean(workspaces?.items?.some((workspace) => workspace.sessionIds.includes(props.sessionId)));
-  const defaultRequest = () => props.conversationKind === "formatting" ? "\u8BF7\u68C0\u67E5\u5F53\u524D Word \u7684\u683C\u5F0F\uFF0C\u5E76\u6309\u6211\u7684\u8981\u6C42\u751F\u6210\u53EF\u9884\u89C8\u7684\u683C\u5F0F\u65B9\u6848\u3002\u5148\u4E0D\u8981\u5E94\u7528\u3002" : props.autoSelectionDraft && props.selectedText ? `\u8BF7\u4FEE\u6539\u5F53\u524D\u9009\u53E5\uFF1A
+  const defaultRequest = (prompt = templatePrompt) => props.conversationKind === "formatting" ? "\u8BF7\u68C0\u67E5\u5F53\u524D Word \u7684\u683C\u5F0F\uFF0C\u5E76\u6309\u6211\u7684\u8981\u6C42\u751F\u6210\u53EF\u9884\u89C8\u7684\u683C\u5F0F\u65B9\u6848\u3002\u5148\u4E0D\u8981\u5E94\u7528\u3002" : props.autoSelectionDraft && props.selectedText ? `\u8BF7\u4FEE\u6539\u5F53\u524D\u9009\u53E5\uFF1A
 \u201C${props.selectedText}\u201D
 
-\u4FEE\u6539\u8981\u6C42\uFF1A${templatePrompt}` : props.conversationOnly ? "\u8BF7\u7ED3\u5408\u6574\u7BC7\u7A3F\u4EF6\u53CA\u5B9E\u9645\u6587\u732E\uFF0C\u8BA8\u8BBA\u8BBA\u8BC1\u7ED3\u6784\u3001\u672F\u8BED\u4E00\u81F4\u6027\u4E0E\u8BC1\u636E\u652F\u6301\uFF0C\u5148\u7ED9\u51FA\u4FEE\u6539\u5EFA\u8BAE\uFF0C\u4E0D\u76F4\u63A5\u6539\u5199\u6587\u4EF6\u3002" : templatePrompt;
+\u4FEE\u6539\u8981\u6C42\uFF1A${prompt}` : props.conversationOnly ? "\u8BF7\u7ED3\u5408\u6574\u7BC7\u7A3F\u4EF6\u53CA\u5B9E\u9645\u6587\u732E\uFF0C\u8BA8\u8BBA\u8BBA\u8BC1\u7ED3\u6784\u3001\u672F\u8BED\u4E00\u81F4\u6027\u4E0E\u8BC1\u636E\u652F\u6301\uFF0C\u5148\u7ED9\u51FA\u4FEE\u6539\u5EFA\u8BAE\uFF0C\u4E0D\u76F4\u63A5\u6539\u5199\u6587\u4EF6\u3002" : prompt;
+  const chooseTemplate = (id) => {
+    setTemplate(id);
+    if (member && input?.phase === "plain" && !props.selectionPending && (!input.draft?.trim() || input.draft === automaticDraft.current?.text)) {
+      const text2 = defaultRequest(PROMPT_TEMPLATES.find((item) => item.id === id).prompt);
+      props.inputActions.setDraft(text2);
+      props.inputActions.persistDraft();
+      automaticDraft.current = { jobId: props.jobId, text: text2 };
+      setNotice("\u6A21\u677F\u5DF2\u7ACB\u5373\u66F4\u65B0\u5230\u8F93\u5165\u6846\uFF0C\u53EF\u7F16\u8F91\u540E\u53D1\u9001\u3002");
+    } else setNotice("\u6A21\u677F\u5DF2\u9009\u62E9\uFF1B\u5DF2\u6709\u8F93\u5165\u5DF2\u4FDD\u7559\uFF0C\u53EF\u70B9\u51FB\u586B\u5165\u6A21\u677F\u3002");
+  };
+  const conversationContent = import_react12.default.useMemo(() => props.renderFactorySlot("conversation.content", { variant: "embedded", phase: "active", hero: false }), [props.renderFactorySlot]);
   const fillDefault = () => {
     if (!member || input?.phase !== "plain" || props.selectionPending) return;
     if (input?.draft?.trim() && input.draft !== automaticDraft.current?.text) {
@@ -46706,7 +47109,7 @@ function NativeSentenceBody(props) {
     automaticDraft.current = { jobId: props.jobId, text: text2 };
     setNotice("\u9ED8\u8BA4\u8981\u6C42\u5DF2\u586B\u5165\u539F\u751F\u8F93\u5165\u6846\uFF0C\u786E\u8BA4\u6A21\u578B\u540E\u53D1\u9001\u3002");
   };
-  import_react13.default.useEffect(() => {
+  import_react12.default.useEffect(() => {
     if (props.conversationOnly) {
       preparedSelection.current = null;
       return;
@@ -46723,7 +47126,7 @@ function NativeSentenceBody(props) {
     props.inputActions.persistDraft();
     setNotice("\u5F53\u524D\u9009\u53E5\u7684\u9ED8\u8BA4\u8981\u6C42\u5DF2\u586B\u5165\uFF1B\u53EF\u76F4\u63A5\u7F16\u8F91\uFF0C\u786E\u8BA4\u6A21\u578B\u540E\u53D1\u9001\u3002");
   }, [props.autoSelectionDraft, props.conversationOnly, props.selectedText, props.selectionPending, props.jobId, member, input?.phase, input?.draft, props.inputActions]);
-  import_react13.default.useEffect(() => {
+  import_react12.default.useEffect(() => {
     const keys2 = (event) => {
       if (!event.ctrlKey || !event.altKey) return;
       if (event.key.toLowerCase() === "i") {
@@ -46747,36 +47150,35 @@ function NativeSentenceBody(props) {
     window.addEventListener("keydown", keys2, true);
     return () => window.removeEventListener("keydown", keys2, true);
   }, [member, input?.phase, input?.draft, props.inputActions, props.selectionPending, props.selectedText, props.autoSelectionDraft, template]);
-  import_react13.default.useEffect(() => {
+  import_react12.default.useEffect(() => {
     sentenceHost.mounted(props.jobId, true);
     return () => sentenceHost.mounted(props.jobId, false);
   }, [props.jobId, props.sessionId]);
-  import_react13.default.useEffect(() => {
+  import_react12.default.useEffect(() => {
     const record = sentenceHost.records.get(props.jobId);
     if (record) {
       record.nativeEvidence = { slotSessionId: props.sessionId, workspaceMember: member, inputPhase: input?.phase || null };
       sentenceHost.notify();
     }
   }, [props.jobId, props.sessionId, member, input?.phase]);
-  import_react13.default.useEffect(() => {
+  import_react12.default.useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 4e3);
     return () => clearTimeout(timer);
   }, [notice]);
-  return /* @__PURE__ */ import_react13.default.createElement("div", { ref: body, className: "rw-native-sentence-body" }, (!member || !props.conversationOnly) && /* @__PURE__ */ import_react13.default.createElement("div", { className: "rw-native-sentence-tools" }, !member && /* @__PURE__ */ import_react13.default.createElement("span", null, "\u6B63\u5728\u52A0\u5165\u8BBA\u6587\u5DE5\u4F5C\u533A\u2026"), !props.conversationOnly && /* @__PURE__ */ import_react13.default.createElement(PromptPicker, { value: template, disabled: !member || input?.phase !== "plain" || props.selectionPending, onChange: (id) => {
-    setTemplate(id);
-    setNotice("\u6A21\u677F\u5DF2\u9009\u62E9\uFF1B\u70B9\u51FB\u586B\u5165\u6A21\u677F\uFF0C\u53EF\u7F16\u8F91\u540E\u53D1\u9001\u3002");
-  } }), !props.conversationOnly && /* @__PURE__ */ import_react13.default.createElement("button", { className: "rw-secondary", title: "\u586B\u5165\u9ED8\u8BA4\u8981\u6C42\uFF08Ctrl+Alt+P\uFF09\uFF0CCtrl+Alt+Enter \u53D1\u9001", disabled: !member || input?.phase !== "plain" || props.selectionPending, onClick: fillDefault }, "\u586B\u5165\u6A21\u677F")), !props.conversationOnly && /* @__PURE__ */ import_react13.default.createElement("details", { className: "rw-template-preview" }, /* @__PURE__ */ import_react13.default.createElement("summary", null, "\u67E5\u770B\u6A21\u677F\u5185\u5BB9"), /* @__PURE__ */ import_react13.default.createElement("p", null, templatePrompt)), notice && /* @__PURE__ */ import_react13.default.createElement("p", { className: "rw-native-sentence-notice", role: "status" }, notice), props.renderFactorySlot("conversation.content", { variant: "embedded", phase: "active", hero: false }));
+  return /* @__PURE__ */ import_react12.default.createElement("div", { ref: body, className: "rw-native-sentence-body" }, (!member || !props.conversationOnly) && /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-native-sentence-tools" }, !member && /* @__PURE__ */ import_react12.default.createElement("span", null, "\u6B63\u5728\u52A0\u5165\u8BBA\u6587\u5DE5\u4F5C\u533A\u2026"), !props.conversationOnly && /* @__PURE__ */ import_react12.default.createElement(PromptPicker, { value: template, disabled: !member || input?.phase !== "plain" || props.selectionPending, onChange: chooseTemplate }), !props.conversationOnly && /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-secondary", title: "\u586B\u5165\u9ED8\u8BA4\u8981\u6C42\uFF08Ctrl+Alt+P\uFF09\uFF0CCtrl+Alt+Enter \u53D1\u9001", disabled: !member || input?.phase !== "plain" || props.selectionPending, onClick: fillDefault }, "\u586B\u5165\u6A21\u677F")), !props.conversationOnly && /* @__PURE__ */ import_react12.default.createElement("details", { className: "rw-template-preview" }, /* @__PURE__ */ import_react12.default.createElement("summary", null, "\u67E5\u770B\u6A21\u677F\u5185\u5BB9"), /* @__PURE__ */ import_react12.default.createElement("p", null, templatePrompt)), notice && /* @__PURE__ */ import_react12.default.createElement("p", { className: "rw-native-sentence-notice", role: "status" }, notice), conversationContent);
 }
 function NativeSentenceConversation({ info, SessionProvider, renderSlot }) {
-  import_react13.default.useSyncExternalStore(sentenceHost.subscribe, sentenceHost.getSnapshot);
-  const [attempt, setAttempt] = import_react13.default.useState(0);
-  const [connectionError, setConnectionError] = import_react13.default.useState("");
-  import_react13.default.useEffect(() => {
+  import_react12.default.useSyncExternalStore(sentenceHost.subscribe, sentenceHost.getSnapshot);
+  const [attempt, setAttempt] = import_react12.default.useState(0);
+  const [connectionError, setConnectionError] = import_react12.default.useState("");
+  const lastReady = import_react12.default.useRef(null), readyService = import_react12.default.useRef(null);
+  import_react12.default.useEffect(() => {
     let closed = false;
     if (sentenceHost.sessions && info.job?.native) {
       setConnectionError("");
-      void api.mutate("reconnectNativeSentence", {}).then(() => {
+      const previous2 = lastReady.current, warm = attempt === 0 && readyService.current === sentenceHost.sessions && previous2?.projectId === info.project.id && previous2?.objectId === info.job.objectId && previous2?.sessionId === info.job.nativeSessionId;
+      void (warm ? Promise.resolve() : api.mutate("reconnectNativeSentence", {})).then(() => {
         if (!closed) return sentenceHost.ensure(info.project, info.job, info.onBinding, { verify: attempt > 0 });
       }).then((record2) => {
         if (!closed && record2?.status === "ready") info.onError("");
@@ -46792,14 +47194,21 @@ function NativeSentenceConversation({ info, SessionProvider, renderSlot }) {
     };
   }, [info.job?.id, info.job?.nativeSessionId, sentenceHost.sessions, attempt]);
   const record = sentenceHost.records.get(info.job?.id);
-  if (connectionError || !SessionProvider || !sentenceHost.sessions || record?.status !== "ready") return /* @__PURE__ */ import_react13.default.createElement("div", { className: "rw-native-failure", role: "status" }, connectionError || record?.error || "\u6B63\u5728\u8FDE\u63A5 DSH \u539F\u751F\u9009\u53E5\u4F1A\u8BDD\u2026", (connectionError || record?.status === "failed") && /* @__PURE__ */ import_react13.default.createElement("button", { className: "rw-secondary", onClick: () => setAttempt((n) => n + 1) }, "\u91CD\u65B0\u8FDE\u63A5"));
-  return /* @__PURE__ */ import_react13.default.createElement("div", { className: "rw-native-sentence-frame", "data-native-sentence-session-id": record.sessionId }, /* @__PURE__ */ import_react13.default.createElement(NativeBoundary, { key: record.sessionId }, /* @__PURE__ */ import_react13.default.createElement(SessionProvider, { session: record.ref }, renderSlot(NS + ".sentence-session", { jobId: info.job.id, conversationKind: info.job.conversationKind, conversationOnly: info.job.conversationOnly, selectedText: info.job.original || info.job.output?.original, selectionPending: info.selectionPending, autoSelectionDraft: info.autoSelectionDraft }, { only: "native" }))));
+  if (record?.status === "ready") {
+    lastReady.current = record;
+    readyService.current = sentenceHost.sessions;
+  }
+  const previous = lastReady.current;
+  const shown = record?.status === "ready" ? record : record?.status !== "failed" && readyService.current === sentenceHost.sessions && previous?.projectId === info.project.id && previous?.objectId === info.job?.objectId && previous?.sessionId === info.job?.nativeSessionId ? previous : null;
+  if (connectionError || !SessionProvider || !sentenceHost.sessions || !shown) return /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-native-failure", role: "status" }, connectionError || record?.error || "\u6B63\u5728\u8FDE\u63A5 DSH \u539F\u751F\u9009\u53E5\u4F1A\u8BDD\u2026", (connectionError || record?.status === "failed") && /* @__PURE__ */ import_react12.default.createElement("button", { className: "rw-secondary", onClick: () => setAttempt((n) => n + 1) }, "\u91CD\u65B0\u8FDE\u63A5"));
+  const discussion = info.job.conversationOnly || ["adopted", "undone"].includes(info.job.output?.review);
+  return /* @__PURE__ */ import_react12.default.createElement("div", { className: "rw-native-sentence-frame", "data-native-sentence-session-id": shown.sessionId }, /* @__PURE__ */ import_react12.default.createElement(NativeBoundary, { key: shown.sessionId }, /* @__PURE__ */ import_react12.default.createElement(SessionProvider, { session: shown.ref }, renderSlot(NS + ".sentence-session", { jobId: info.job.id, conversationKind: info.job.conversationKind, conversationOnly: discussion, selectedText: discussion ? "" : info.job.original || info.job.output?.original, selectionPending: info.selectionPending || record?.status !== "ready", autoSelectionDraft: info.autoSelectionDraft }, { only: "native" }))));
 }
 function OpenButton() {
-  return /* @__PURE__ */ import_react13.default.createElement("button", { type: "button", title: "\u6253\u5F00\u79D1\u7814\u5DE5\u4F5C\u53F0", "aria-label": "\u79D1\u7814\u5DE5\u4F5C\u53F0", onClick: () => context.layout.selectPanel(NS), style: { display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 9px", border: 0, borderRadius: 6, color: "inherit", background: "transparent", cursor: "pointer", fontSize: 12 } }, /* @__PURE__ */ import_react13.default.createElement(Icon, { name: "brand", size: 16 }), "\u79D1\u7814\u5DE5\u4F5C\u53F0");
+  return /* @__PURE__ */ import_react12.default.createElement("button", { type: "button", title: "\u6253\u5F00\u79D1\u7814\u5DE5\u4F5C\u53F0", "aria-label": "\u79D1\u7814\u5DE5\u4F5C\u53F0", onClick: () => context.layout.selectPanel(NS), style: { display: "inline-flex", alignItems: "center", gap: 7, padding: "7px 9px", border: 0, borderRadius: 6, color: "inherit", background: "transparent", cursor: "pointer", fontSize: 12 } }, /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "brand", size: 16 }), "\u79D1\u7814\u5DE5\u4F5C\u53F0");
 }
 function WorkbenchRailIcon() {
-  return /* @__PURE__ */ import_react13.default.createElement(Icon, { name: "brand", size: 18 });
+  return /* @__PURE__ */ import_react12.default.createElement(Icon, { name: "brand", size: 18 });
 }
 var inject = ["slots", "layout"];
 function apply2(ctx) {
@@ -46831,7 +47240,7 @@ function apply2(ctx) {
           const next = model?.next || model?.lastUsed;
           return { projectId: record.projectId, task: record.task, jobId: record.jobId, sessionId: record.sessionId, status: record.status, errorCode: record.errorCode || null, mounted: Boolean(record.mounted), nativeEvidence: { ...record.nativeEvidence, storedDraftMarker: storedMarker(localStorage, record.sessionId) }, nextModel: next ? { provider: next.provider, model: next.model, reasoningEffort: next.reasoningEffort } : null };
         });
-        void api.hostStatus({ version: "0.7.1", uiVersion: "0.8.1", origin: location.origin, userAgent: navigator.userAgent, sessions }).catch(() => {
+        void api.hostStatus({ version: "0.7.1", uiVersion: "0.11.0", origin: location.origin, userAgent: navigator.userAgent, sessions }).catch(() => {
         });
       }, 120);
     };

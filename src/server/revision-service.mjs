@@ -76,5 +76,20 @@ export async function revisionAction(runtime,action,data){
       output.proposal.sentenceChanges=rows;
       store.db.prepare('UPDATE jobs SET output=?,updated_at=? WHERE id=?').run(JSON.stringify(output),new Date().toISOString(),row.id);return{saved:true};
     });
+    case 'editSentenceSuggestion':return store.write(()=>{
+      const row=runtime.writing.row(projectId,data.jobId),output=JSON.parse(row.output||'null');
+      if(!output?.proposal||output.review!=='pending'||row.status!=='succeeded')throw new StoreError('REVISION_NOT_READY','只有尚未采用的有效建议可以编辑。',409);
+      if(store.object(projectId,output.objectId).revision!==output.expectedRevision||data.expectedReplacement!==output.proposal.replacement)throw new StoreError('VERSION_CONFLICT','正文或建议已更新，编辑内容仍保留，请核对最新建议。',409);
+      if(!Number.isInteger(data.index)||typeof data.text!=='string'||data.text.length>8000||/[\r\n\x00]/.test(data.text))throw new StoreError('INVALID_INPUT','本句应为不超过8000字的单段文字。');
+      const rows=compareSentences(output.original,output.proposal.replacement,output.proposal.sentenceChanges),item=rows[data.index];
+      if(!item||item.before!==data.before||item.after!==data.after)throw new StoreError('VERSION_CONFLICT','句子已更新，请核对后重试。',409);
+      const kinds=['unchanged','wording','structure','meaning'],changed=compareSentences(item.before,data.text),kind=changed.reduce((kind,row)=>kinds.indexOf(row.kind)>kinds.indexOf(kind)?row.kind:kind,'unchanged');
+      rows[data.index]={before:item.before,after:data.text,kind,source:'estimate',reason:'作者编辑后的建议，修改分级待核对'};
+      const replacement=rows.map(item=>item.after).join('');if(!replacement.trim()||replacement.length>8000)throw new StoreError('INVALID_INPUT','完整建议不能为空或超过8000字。');
+      if(replacement!==replacement.trim())throw new StoreError('INVALID_INPUT','完整建议的首尾不能包含空白，请调整后保存。');
+      output.authorEdits=[...(output.authorEdits||[]),{index:data.index,before:item.after,after:data.text,at:new Date().toISOString()}].slice(-50);
+      output.proposal={...output.proposal,replacement,sentenceChanges:rows.filter(row=>row.before||row.after)};
+      store.db.prepare('UPDATE jobs SET output=?,updated_at=? WHERE id=?').run(JSON.stringify(output),new Date().toISOString(),row.id);return{saved:true};
+    });
   }
 }

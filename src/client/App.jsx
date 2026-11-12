@@ -10,6 +10,7 @@ import nativeTheme from './native-theme.css';
 import compactLayout from './compact-layout.css';
 import revisionToolsStyle from './revision-tools.css';
 import refinedStyle from './refined-workbench.css';
+import glassStyle from './glass-workbench.css';
 import {DocumentHistory} from './RevisionTools.jsx';
 import { SentenceEditor } from './SentenceEditor.jsx';
 import { WorkspaceBrowser } from './WorkspaceBrowser.jsx';
@@ -22,7 +23,7 @@ const date = (value) => value ? new Intl.DateTimeFormat('zh-CN', { timeZone: 'As
 const paneNames = { main: '工作区', context: '项目资料', chat: 'DSH 原生对话' };
 const RECOVERY_KEY = 'dsh-research-workbench:pending-drafts:v1';
 const layoutEvent = (kind, event) => ({ id: crypto.randomUUID(), kind, trusted: event.isTrusted === true });
-const workbenchStyles = styles + nativeTheme + compactLayout + revisionToolsStyle + refinedStyle;
+const workbenchStyles = styles + nativeTheme + compactLayout + revisionToolsStyle + refinedStyle + glassStyle;
 
 function Modal({ title, onClose, children, footer }) {
   const ref = React.useRef(null);
@@ -181,12 +182,18 @@ export function App({ api, nativeRender, nativeSentenceRender, onLeave = null, p
   const mutate = async (action, data) => { const next = await api.mutate(action, data); accept(next); return next; };
   React.useEffect(() => {
     if (!api.stamp) return;
+    if(api.watchState){
+      if(!state.stamp)return;
+      let closed=false;const controller=new AbortController();let retry;
+      const watch=async()=>{while(!closed){try{const next=await api.watchState(current.current.stamp,controller.signal);if(closed)return;if(next.stamp!==current.current.stamp)accept(await api.bootstrap())}catch{if(closed)return;await new Promise(resolve=>{retry=setTimeout(resolve,1000)})}}};
+      void watch();return()=>{closed=true;controller.abort();clearTimeout(retry)};
+    }
     let pending = false, cancelled = false;
     const check = async () => { if (pending || document.visibilityState === 'hidden') return; pending = true; try { const next = await api.stamp(); if (!cancelled && next.stamp !== current.current.stamp) { const fresh = await api.bootstrap(); if (!cancelled) accept(fresh); } } catch { /* Keep local drafts while a native connection is recovering. */ } finally { pending = false; } };
     const timer = setInterval(() => void check(), 2500);
     window.addEventListener('focus', check); document.addEventListener('visibilitychange', check);
     return () => { cancelled = true; clearInterval(timer); window.removeEventListener('focus', check); document.removeEventListener('visibilitychange', check); };
-  }, [api, accept]);
+  }, [api, accept, Boolean(state.stamp)]);
   const safe = (fn) => async (...args) => { try { setError(''); return await fn(...args); } catch (e) { setError(e.message || '操作未完成，输入仍保留。'); return null; } };
   const flush = React.useCallback(async () => {
     if (saving.current) return saving.current;
@@ -271,8 +278,8 @@ export function App({ api, nativeRender, nativeSentenceRender, onLeave = null, p
   const running = state.projects.flatMap((p) => p.jobs || []).filter((job) => ['queued', 'running'].includes(job.status)).length;
   const changed = drafts.current.size > 0 || wordChanged;
   const isWord=object?.encoding==='binary'&&/\.docx$/i.test(object.metadata?.workspaceFile||object.title);
-  const prepareSentence = async ({ markdown, ...request }) => {
-    if(request.wordSelection){await saveAll();const saved=current.current.projects.find(p=>p.id===project.id).objects.find(o=>o.id===object.id);const next=await mutate('prepareSentenceSession',{...request,projectId:project.id,objectId:object.id,expectedRevision:saved.revision});return next.actionResult.jobId;}
+  const prepareSentence = async ({ markdown, wordSaved=false, ...request }) => {
+    if(request.wordSelection){if(!wordSaved)await saveAll();const saved=current.current.projects.find(p=>p.id===project.id).objects.find(o=>o.id===object.id);const next=await mutate('prepareSentenceSession',{...request,projectId:project.id,objectId:object.id,expectedRevision:saved.revision});return next.actionResult.jobId;}
     if ((drafts.current.get(object.id)?.text ?? object.text) !== markdown) {
       drafts.current.set(object.id, { projectId: project.id, text: markdown, expectedRevision: drafts.current.get(object.id)?.expectedRevision ?? object.revision }); cacheDrafts(); setDraftEpoch(n => n + 1);
     }
@@ -289,7 +296,11 @@ export function App({ api, nativeRender, nativeSentenceRender, onLeave = null, p
     onNativePrepare: nativeSentenceRender ? prepareSentence : null,
     onOpenConversation: nativeSentenceRender ? async ({markdown,...options}) => { if (object.encoding==='utf8' && (drafts.current.get(object.id)?.text ?? object.text) !== markdown) { drafts.current.set(object.id, { projectId: project.id, text: markdown, expectedRevision: drafts.current.get(object.id)?.expectedRevision ?? object.revision }); cacheDrafts(); setDraftEpoch(n=>n+1); } await saveAll(); const next=await mutate('openWritingConversation',{projectId:project.id,objectId:object.id,...options});return next.actionResult.jobId; } : null,
     initialNativeJobId: project.writingThreads?.[object?.id]?.jobId||view.sentenceJobId,
-    onNativeOpen: jobId => persistView({ sentenceJobId: jobId }),
+    onNativeOpen: jobId => {
+      const owner=current.current.projects.find(item=>item.id===project.id);
+      if(owner?.writingThreads?.[object.id]?.jobId===jobId)return;
+      return persistView({ sentenceJobId: jobId });
+    },
     onRefresh: async () => { const fresh=await api.stamp();if(fresh.stamp!==current.current.stamp)accept(await api.bootstrap()); },
     onRevise: async ({ markdown, ...request }) => {
       if ((drafts.current.get(object.id)?.text ?? object.text) !== markdown) {
@@ -302,7 +313,8 @@ export function App({ api, nativeRender, nativeSentenceRender, onLeave = null, p
       return next.actionResult.jobId;
     },
     onClassify: async (jobId,data) => { await mutate('classifySentence',{projectId:project.id,jobId,...data}); },
-    onAction: async (action, jobId) => { await saveAll(); await mutate(action, { projectId: project.id, jobId }); },
+    onEditSuggestion:async(jobId,data)=>mutate('editSentenceSuggestion',{projectId:project.id,jobId,...data}),
+    onAction: async (action, jobId, options={}) => { if(!options.wordSaved)await saveAll(); return mutate(action, { projectId: project.id, jobId }); },
     onImport: async data => { await mutate('importLiterature', { ...data, projectId: project.id }); },
   }} />;
   const chat = project && task !== 'writing' && <><div className="rw-chat-intro"><Icon name="link" size={12}/><span>已关联当前项目资料</span></div><div className="rw-chat-area">{nativeRender ? nativeRender({ project, task, projects: state.projects, acceptance: state.nativeAcceptance, onBinding: accept, onError: setError }) : <div className="rw-chat-empty"><div className="rw-chat-symbol"><Icon name="chat" size={23} /></div><h3>把思路留在研究现场</h3><p>{preview ? '这是独立界面预览。DSH 中会在此承载原生对话，沿用已有模型配置。' : '在 DSH Desktop 打开工作台，使用写作、制图和阅读各自的原生对话。'}<br />项目资料始终可以独立使用。</p></div>}</div></>;

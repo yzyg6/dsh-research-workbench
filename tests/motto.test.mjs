@@ -4,14 +4,14 @@ import {createRequire} from 'node:module';
 import {mkdir} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {join} from 'node:path';
-import {DEFAULT_MOTTOS,MOTTO_SOURCES,defaultMottoPreferences,readMottoPreferences,writeMottoPreferences,parseMottoLines,mottoInterval,mottoDisplayText} from '../src/client/motto-preferences.mjs';
+import {DEFAULT_MOTTOS,DEFAULT_MOTTO_FONT,MAO_FONT_FAMILY,MOTTO_SOURCES,defaultMottoPreferences,readMottoPreferences,writeMottoPreferences,parseMottoLines,mottoInterval,mottoDisplayText,mottoFontFamily} from '../src/client/motto-preferences.mjs';
 
 const storage=()=>{const values=new Map();return {getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value),values}};
 test('defaults contain sourced excerpts and switch every 30 seconds; custom settings persist across reopening',()=>{
   const local=storage(),initial=readMottoPreferences(local);
   assert.equal(initial.intervalSeconds,30);assert.equal(initial.items.length,6);assert.equal(DEFAULT_MOTTOS.length,MOTTO_SOURCES.length);
   assert(initial.items.every(line=>line.includes('毛泽东《')));assert(MOTTO_SOURCES.every(url=>url.startsWith('https://')));
-  const next={enabled:true,paused:true,intervalSeconds:45,items:['做好今天的实验。','把问题想清楚。']};
+  const next={enabled:true,paused:true,intervalSeconds:45,fontFamily:'华文行楷',items:['做好今天的实验。','把问题想清楚。']};
   assert(writeMottoPreferences(next,local));assert.deepEqual(readMottoPreferences(local),next);
   initial.items.pop();assert.equal(DEFAULT_MOTTOS.length,6);
 });
@@ -21,7 +21,7 @@ test('custom lines, interval bounds, disabled empty lists and inaccessible stora
   for(const seconds of [0,4,3601,NaN,'',2.5])assert.throws(()=>mottoInterval(seconds));
   assert.equal(mottoInterval('5'),5);assert.equal(mottoInterval(3600),3600);
   assert.equal(mottoDisplayText(DEFAULT_MOTTOS[0]),'世上无难事，只要肯登攀。');assert.equal(mottoDisplayText('努力——因为想做得更好。'),'努力——因为想做得更好。');
-  const local=storage(),empty={enabled:false,paused:false,intervalSeconds:30,items:[]};
+  const local=storage(),empty={enabled:false,paused:false,intervalSeconds:30,fontFamily:DEFAULT_MOTTO_FONT,items:[]};
   assert(writeMottoPreferences(empty,local));assert.deepEqual(readMottoPreferences(local),empty);
   const denied={getItem(){throw Error('denied')},setItem(){throw Error('denied')}};
   assert.deepEqual(readMottoPreferences(denied),defaultMottoPreferences());assert.equal(writeMottoPreferences(empty,denied),false);
@@ -72,4 +72,23 @@ test('custom content and interval apply together; editing pauses the timer and c
 test('a single custom phrase and a disabled display do not create recurring timers',async t=>{
   const view=await mount(t,{enabled:false,paused:false,intervalSeconds:30,items:['唯一一句。']});
   assert.equal(view.timers.size,0);assert.equal(view.renderer.root.findByProps({'aria-label':'励志标语'}).props.hidden,true);
+});
+
+test('legacy settings acquire the Mao font without losing existing phrases or pause settings',()=>{
+  const local=storage();local.setItem('dsh-research-workbench:mottos:v1',JSON.stringify({enabled:true,paused:true,intervalSeconds:12,items:['原有自定义标语。']}));
+  const preferences=readMottoPreferences(local);assert.equal(preferences.fontFamily,'毛体');assert.equal(preferences.paused,true);assert.equal(preferences.intervalSeconds,12);assert.deepEqual(preferences.items,['原有自定义标语。']);
+  assert(mottoFontFamily('毛体').startsWith(JSON.stringify(MAO_FONT_FAMILY)));assert(mottoFontFamily('系统字体').startsWith('var(--rw-ui'));
+  assert(mottoFontFamily('某个 "自定义" 字体').startsWith(JSON.stringify('某个 "自定义" 字体')));
+  assert.equal(writeMottoPreferences({...preferences,fontFamily:'\x00'},local),false);assert.equal(readMottoPreferences(local).fontFamily,'毛体');
+});
+
+test('font preview, save and cancel update only the motto; selected family survives reopening',async t=>{
+  const view=await mount(t),line=()=>view.renderer.root.findByProps({className:'rw-motto-line'});
+  assert(line().props.style.fontFamily.startsWith(JSON.stringify(MAO_FONT_FAMILY)));
+  await view.open();await view.field('标语字体','华文行楷');assert(view.renderer.root.findByProps({'aria-label':'标语字体预览'}).props.style.fontFamily.startsWith('"华文行楷"'));
+  assert(line().props.style.fontFamily.startsWith(JSON.stringify(MAO_FONT_FAMILY)));await view.button('保存标语');
+  assert(line().props.style.fontFamily.startsWith('"华文行楷"'));assert.equal(readMottoPreferences(view.local).fontFamily,'华文行楷');
+  await view.open();await view.field('标语字体','宋体');await view.button('取消');assert(line().props.style.fontFamily.startsWith('"华文行楷"'));
+  await view.open();assert.equal(view.renderer.root.findByProps({'aria-label':'标语字体'}).props.value,'华文行楷');
+  await view.field('标语字体','');await view.button('保存标语');assert(view.renderer.root.findByProps({role:'alert'}).children.join('').includes('字体名称'));assert.equal(readMottoPreferences(view.local).fontFamily,'华文行楷');
 });

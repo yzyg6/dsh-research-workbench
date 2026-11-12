@@ -1,7 +1,7 @@
 import { readFile, writeFile, mkdir, unlink, stat } from 'node:fs/promises';
 import { join, basename, extname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
+import {PythonWorker} from './python-worker.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { StoreError } from './store.mjs';
@@ -11,17 +11,15 @@ const check=(ok,code,message,status=400)=>{if(!ok)throw new StoreError(code,mess
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const now=()=>new Date().toISOString();
 export class WordEditing {
-  constructor(store,{script=fileURLToPath(new URL('./word-edit.py',import.meta.url))}={}){this.store=store;this.script=script;this.pending=0;this.tail=Promise.resolve()}
+  constructor(store,{script=fileURLToPath(new URL('./word-edit.py',import.meta.url))}={}){this.store=store;this.script=script;this.pending=0;this.tail=Promise.resolve();this.worker=store?(store.wordWorker||=new PythonWorker(script)):null;this.warming=new Map()}
+  warmHistory(projectId,objectId){
+    const key=`${projectId}:${objectId}:${this.store.object(projectId,objectId).sha256}`;if(this.warming.has(key))return this.warming.get(key);
+    const operation=this.store.write(async()=>{await this.source(projectId,objectId);await this.store.documentHistory.ensure(projectId,objectId)}).catch(error=>{this.warming.delete(key);throw error});
+    this.warming.set(key,operation);if(this.warming.size>24)this.warming.delete(this.warming.keys().next().value);return operation;
+  }
   inspect(args){
     check(this.pending<4,'WORD_BUSY','Word 正在保存或检查，请稍后重试。',429);this.pending++;
-    const operation=this.tail.then(()=>new Promise((resolve,reject)=>{
-      const child=spawn('python',['-I','-X','utf8',this.script],{windowsHide:true,stdio:['pipe','pipe','pipe']});let output='',overflow=false;
-      const timer=setTimeout(()=>{child.kill();reject(new StoreError('WORD_TIMEOUT','Word 检查超时，当前编辑内容仍保留。',504))},30000);timer.unref?.();
-      child.stdout.setEncoding('utf8');child.stdout.on('data',chunk=>{if(output.length+chunk.length>2*1024*1024){overflow=true;child.kill()}else output+=chunk.toString('utf8')});child.stderr.resume();
-      child.on('error',()=>{clearTimeout(timer);reject(new StoreError('WORD_UNAVAILABLE','未找到可用的本机 Python，Word 保存未完成。',503))});
-      child.on('close',code=>{clearTimeout(timer);let result;try{result=JSON.parse(output)}catch{}if(code!==0||!result||overflow)reject(new StoreError('WORD_INVALID',result?.error||'Word 检查未通过，原文件保留。'));else resolve(result)});
-      child.stdin.on('error',()=>{});child.stdin.end(JSON.stringify(args));
-    }));this.tail=operation.catch(()=>{});return operation.finally(()=>{this.pending--});
+    const operation=this.tail.then(async()=>{const worker=this.worker||new PythonWorker(this.script);try{return await worker.call(args)}finally{if(!this.worker)await worker.close()}}).catch(error=>{throw new StoreError('WORD_INVALID',error.message||'Word 检查未通过，原文件保留。')});this.tail=operation.catch(()=>{});return operation.finally(()=>{this.pending--});
   }
   async source(projectId,objectId){
     const row=this.store.object(projectId,objectId);check(row.kind==='manuscript'&&row.encoding==='binary'&&/\.docx$/i.test(JSON.parse(row.metadata).workspaceFile||row.path),'INVALID_WORD','请选择 .docx 正文。');
@@ -57,7 +55,7 @@ export class WordEditing {
       }throw error;
     }
   }
-  async enqueue({projectId,objectId,expectedRevision,wordSelection,instruction=DEFAULT_SENTENCE_PROMPT,operationKey}){
+  async enqueue({projectId,objectId,expectedRevision,wordSelection,instruction=DEFAULT_SENTENCE_PROMPT,operationKey},{nativeThreadKey}={}){
     check(typeof instruction==='string'&&instruction.length<=6000&&typeof operationKey==='string'&&operationKey.length<=160,'INVALID_INPUT','修改要求无效。');
     check(wordSelection&&typeof wordSelection.text==='string'&&wordSelection.text.length<=8000,'INVALID_SELECTION','请选择一句正文。');
     const {row,path}=await this.source(projectId,objectId);check(row.revision===expectedRevision,'VERSION_CONFLICT','Word 已更新，请重新选句。',409);
@@ -66,7 +64,7 @@ export class WordEditing {
       check(this.store.object(projectId,objectId).revision===expectedRevision,'VERSION_CONFLICT','Word 已更新，请重新选句。',409);
       const existing=this.store.db.prepare('SELECT id FROM jobs WHERE project_id=? AND operation_key=?').get(projectId,operationKey);if(existing)return existing.id;
       const project=this.store.project(projectId),id=`j_${randomUUID()}`,stamp=now();
-      const input={native:true,format:'docx',objectId,expectedRevision,wordSelection,selectedText:parsed.selectedText,markdown:parsed.text,sha256:row.sha256,instruction,keywords:'',question:project.question,journal:project.journal,language:project.language};
+      const input={native:true,format:'docx',...(nativeThreadKey?{nativeThreadKey}:{}),objectId,expectedRevision,wordSelection,selectedText:parsed.selectedText,markdown:parsed.text,sha256:row.sha256,instruction,keywords:'',question:project.question,journal:project.journal,language:project.language};
       this.store.db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run(id,projectId,'writing.sentence','draft','Word 选句已准备，等待原生对话',JSON.stringify(input),null,null,operationKey,null,stamp,stamp);return id;
     });
   }

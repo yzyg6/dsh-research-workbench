@@ -1,0 +1,158 @@
+/* Frosted chrome, solid reading surfaces. Blur stays outside the Word canvas;
+   scrolling, selection, resizing and the revision list never animate. */
+.rw-app.rw-app {
+  --rw-ink:#253246;
+  --rw-muted:#617087;
+  --rw-line:#7084a424;
+  --rw-accent:#174994;
+  --rw-canvas:#f4f7fb;
+  --rw-paper:#ffffff;
+  --rw-soft:#e5edf68f;
+  --rw-active:#dceaffd9;
+  --rw-ui:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI Variable Text','Microsoft YaHei UI',sans-serif;
+  --rw-glass:#f8fbffb8;
+  --rw-glass-solid:#f6f9fd;
+  --rw-glass-edge:#ffffffd9;
+  --rw-ease:cubic-bezier(.16,1,.3,1);
+  --rw-shadow:0 24px 64px #2138541c,0 4px 12px #2138540b,inset 0 1px 0 #ffffffd9;
+  --dsw-alias-button-info-fill:#174994!important;
+  --dsw-alias-button-info-hover:#123d7e!important;
+  --dsw-alias-state-business-primary:#174994!important;
+  background:radial-gradient(ellipse at 4% 3%,#dbe8f777,transparent 48%),radial-gradient(ellipse at 96% 100%,#e4eff366,transparent 45%),linear-gradient(145deg,#fafbfd,#f1f5fa)!important;
+}
+.rw-app .rw-topbar {
+  background:var(--rw-glass);
+  border-bottom:1px solid #ffffffa6;
+  box-shadow:0 1px 0 #687c9610;
+}
+.rw-app .rw-brand-emblem {
+  background:#174994;
+  box-shadow:none;
+}
+.rw-app .rw-topbar .rw-brand strong{letter-spacing:.015em}
+.rw-app .rw-sidebar {
+  background:#f1f6fc80;
+  border-right:1px solid #ffffff8c;
+}
+.rw-app .rw-project-picker {
+  background:#ffffff94!important;
+  border:1px solid #ffffffb8!important;
+  box-shadow:0 2px 6px #203c6006,inset 0 1px 0 #ffffffd9;
+}
+.rw-app .rw-nav button[aria-current=page] {
+  background:linear-gradient(125deg,#ffffffc9,#dceaffb3);
+  box-shadow:inset 0 0 0 1px #ffffffbd,0 3px 10px #305b8d0a;
+}
+.rw-app .rw-workspace{padding-top:10px;padding-left:10px}
+.rw-app .rw-pane {
+  border-color:var(--rw-glass-edge);
+  border-radius:20px;
+  background:#ffffffeb;
+  box-shadow:0 10px 36px #2946670c,0 1px 3px #29466708,inset 0 1px 0 #ffffff;
+}
+.rw-app :is(.rw-pane-head,.rw-pane-toolbar,.rw-word-toolbar,.rw-word-sidebar>header) {
+  background:#f9fbfdd9;
+  border-color:var(--rw-line);
+}
+.rw-app :is(.rw-word-toolbar,.rw-word-sidebar>header){height:42px;min-height:42px;box-sizing:border-box}
+.rw-app .rw-word-sidebar{background:#f8fafc}
+.rw-app .rw-word-conversation-document{background:#f8fafc;color:#617087}
+.rw-app .rw-word-sidebar-resizer{background:transparent}
+.rw-app .rw-word-sidebar-resizer:after,.rw-app .rw-splitter:after{background:#859bb65c;border-radius:4px}
+.rw-app :is(.rw-mode-tabs,.rw-word-sidebar>header>.rw-native-sentence-tabs) {
+  background:#6b829319;
+  border:1px solid #7084a414;
+  box-shadow:inset 0 1px 2px #425b7310;
+  border-radius:11px;
+}
+.rw-app :is(.rw-mode-tabs,.rw-native-sentence-tabs) button[aria-pressed=true] {
+  background:#fffffff2;
+  border-radius:8px;
+  color:var(--rw-ink);
+  box-shadow:0 1px 4px #263e5e1a,inset 0 1px 0 #fff;
+}
+.rw-app .rw-secondary {
+  background:#ffffffbd!important;
+  border-color:#7084a42e!important;
+  box-shadow:0 1px 2px #203c6008,inset 0 1px 0 #ffffffd9;
+}
+.rw-app .rw-primary {
+  background:#174994!important;
+  border-color:#174994!important;
+  box-shadow:none;
+}
+.rw-app .rw-primary:hover{background:#123d7e!important}
+.rw-app .rw-global-save{background:#ffffffbd!important;color:#174994!important;border-color:#cbd9ed!important;box-shadow:none;font-weight:500}
+.rw-app .rw-global-save:hover{background:#eaf1fb!important}
+.rw-app :is(input,textarea,select){box-shadow:inset 0 1px 2px #263e5e05}
+.rw-app :is(.rw-action-menu-body,.rw-modal,.rw-native-sentence-dialog) {
+  background:var(--rw-glass);
+  border:1px solid var(--rw-glass-edge);
+  box-shadow:var(--rw-shadow);
+}
+.rw-app .rw-modal-footer{background:#edf3f994}
+.rw-app .rw-modal::backdrop{background:#25395130}
+.rw-app .rw-native-sentence-dialog>header{background:#f6f9fcc7}
+.rw-app :is(.rw-native-sentence-body,.rw-native-frame) [data-composer-card] {
+  background:#ffffffed!important;
+  border-radius:18px;
+  box-shadow:0 0 0 1px #8298b32b,inset 0 1px 0 #ffffff!important;
+}
+/* Native DSH conversation surfaces share the workbench palette, including
+   its sticky composer fade. The manuscript iframe retains its own typography. */
+.rw-app.rw-app :is(.rw-native-frame,.rw-native-sentence-frame){
+  --dsw-alias-bg-base:#f8fafc!important;
+  --dsw-alias-bg-layer-1:#f8fafc!important;
+  --dsw-specific-bubble:#edf3fa!important;
+  --dsw-specific-bubble-highlight:#dee9f7!important;
+  --dsw-font-markdown-base:400 14px/1.85 var(--rw-ui)!important;
+  --dsw-font-markdown-base-strong:600 14px/1.85 var(--rw-ui)!important;
+  --dsw-specific-input-major:#ffffff!important;
+  background:#f8fafc!important;
+  font-family:var(--rw-ui);
+}
+.rw-app :is(.rw-native-frame,.rw-native-sentence-frame) [data-conversation-content]{background:#f8fafc!important}
+.rw-app :is(.rw-native-frame,.rw-native-sentence-frame) [data-conversation-region=messages]{padding-inline:16px}
+/* UserBubble is the shipped DSH 0.2.2 CSS module, also targeted by skins.
+   Override only its surface; keep code, tooltips and scientific markup intact. */
+.rw-app.rw-app :is(.rw-native-frame,.rw-native-sentence-frame) ._bubble_1sgyj_1{
+  background:#edf3fa!important;border:1px solid #dae5f2!important;border-radius:16px!important;
+  box-shadow:none!important;padding:11px 14px;font:400 14px/1.85 var(--rw-ui);color:var(--rw-ink)!important;
+}
+.rw-app.rw-app :is(.rw-native-frame,.rw-native-sentence-frame) [data-composer-input]{font:400 14px/1.75 var(--rw-ui);caret-color:#174994!important}
+.rw-app :is(.rw-word-target,.rw-word-selection-status,.rw-native-sentence-tools,.rw-template-preview){background:#f8fafc}
+.rw-app .rw-word-sidebar .rw-native-sentence-tools{border-color:var(--rw-line)}
+.rw-app .rw-word-sidebar .rw-native-sentence-tools>button{color:#174994}
+.rw-app .rw-word-save-notice,.rw-app .rw-toast {
+  background:#253e60ed;
+  border:1px solid #ffffff30;
+  box-shadow:0 8px 24px #1c355124,inset 0 1px 0 #ffffff17;
+}
+/* A few static glass layers, never one blur per sentence or control. */
+@supports (backdrop-filter:blur(1px)) {
+  .rw-app :is(.rw-topbar,.rw-sidebar,.rw-action-menu-body,.rw-modal,.rw-native-sentence-dialog) {
+    backdrop-filter:blur(18px) saturate(135%);
+  }
+}
+@supports not (backdrop-filter:blur(1px)) {
+  .rw-app :is(.rw-topbar,.rw-sidebar,.rw-action-menu-body,.rw-modal,.rw-native-sentence-dialog){background:var(--rw-glass-solid)}
+}
+/* Keep the four revision backgrounds opaque and instantly scannable. */
+.rw-app .rw-change-row{box-shadow:0 1px 3px #263e5e08}
+.rw-app .rw-change-after textarea{background:#fffffff2;color:var(--rw-ink)}
+.rw-app button{transition:background-color 130ms ease,color 130ms ease,transform 120ms var(--rw-ease)}
+.rw-app :is(.rw-action-menu-body,.rw-modal){animation-duration:180ms}
+.rw-app .rw-toast{animation:rw-glass-notice-in 160ms var(--rw-ease) both}
+@keyframes rw-glass-notice-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+@media(hover:hover) and (pointer:fine) {
+  .rw-app :is(.rw-project-picker,.rw-nav button,.rw-project-row):hover:not(:disabled){transform:none}
+  .rw-app :is(.rw-icon-button,.rw-primary,.rw-secondary):active:not(:disabled){transform:scale(.98)}
+}
+@media(max-width:780px){.rw-app .rw-workspace{padding-top:7px;padding-left:6px}.rw-app .rw-pane{border-radius:16px}}
+@media(prefers-reduced-transparency:reduce){
+  .rw-app :is(.rw-topbar,.rw-sidebar,.rw-action-menu-body,.rw-modal,.rw-native-sentence-dialog){background:var(--rw-glass-solid);backdrop-filter:none}
+}
+@media(prefers-reduced-motion:reduce){
+  .rw-app *,.rw-app *::before,.rw-app *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+  .rw-app button{transform:none!important}
+}
