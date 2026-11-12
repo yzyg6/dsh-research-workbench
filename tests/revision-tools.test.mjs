@@ -12,6 +12,19 @@ import {systemFonts,systemFont} from '../src/server/revision-service.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url)),out=join(root,'_scratch/out/revision-tests');await mkdir(out,{recursive:true});
 async function setup(){const base=await mkdtemp(join(out,'case-')),runtime=new WorkspaceRuntime({root:join(base,'catalog'),sampleRoot:join(root,'samples/figure'),publicRoot:join(root,'public')});const p=await runtime.store.createProject({title:'Git 历史合成测试'}),o=(await runtime.store.state()).projects[0].objects.find(o=>o.kind==='manuscript');return{runtime,p,o,base}}
 
+test('document history saves and restores in Windows workspaces with Git paths longer than 260 characters',{skip:process.platform!=='win32'},async()=>{
+  const base=await mkdtemp(join(out,'long-')),workspacePath=join(base,'nested-paper-'.repeat(8)),r=new WorkspaceRuntime({root:join(base,'catalog'),sampleRoot:join(root,'samples/figure'),publicRoot:join(root,'public')});
+  try{
+    const projectId=await r.store.createProject({title:'长路径合成文稿',workspacePath}),object=(await r.store.state()).projects[0].objects.find(o=>o.kind==='manuscript');
+    const gitPath=join(workspacePath,'.research-workbench','git',object.id+'.git');assert(join(gitPath,'refs','workbench','00000000-0000-0000-0000-000000000000.lock').length>260);
+    await r.store.saveObject({projectId,objectId:object.id,expectedRevision:1,text:'长路径第一版。'});
+    const first=(await r.store.documentHistory.list(projectId,object.id)).head;
+    await r.store.saveObject({projectId,objectId:object.id,expectedRevision:2,text:'长路径第二版。'});
+    await r.mutate('restoreDocumentHistory',{projectId,objectId:object.id,commit:first,expectedRevision:3});
+    assert.equal((await r.store.asset(projectId,object.id)).bytes.toString('utf8'),'长路径第一版。');assert.equal((await r.store.documentHistory.list(projectId,object.id)).entries.length,4);
+  }finally{await r.dispose()}
+});
+
 test('sentence alignment preserves unchanged neighbours, decimals and original text across insertions',()=>{
   const before='第一句保持。第二句保持。Third sentence has 1.25 mg.',after='第一句保持。新增的句子。第二句保持。Third sentence has 1.25 mg.';
   const rows=compareSentences(before,after);assert.equal(rows.map(r=>r.before).join(''),before);assert.equal(rows.map(r=>r.after).join(''),after);

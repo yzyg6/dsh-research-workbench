@@ -7,7 +7,6 @@ import { installProjectTools } from './src/server/tools.mjs';
 import { installProjectWorkspaces } from './src/server/workspaces.mjs';
 import { installWritingModel } from './src/server/writing-model.mjs';
 import { installNativeSentenceWriting } from './src/server/native-writing.mjs';
-import {installWordFormatting}from'./src/server/word-formatting.mjs';
 
 export const inject = ["connection"];
 const directory = fileURLToPath(new URL("./validation/", import.meta.url));
@@ -18,8 +17,8 @@ export async function apply(ctx, config = {}) {
   const runtime = new WorkspaceRuntime({ root: config.root || join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'workbenches', 'research'), sampleRoot: join(packageRoot, 'samples/figure'), publicRoot: join(packageRoot, 'public') });
   ctx.effect(() => () => runtime.dispose(), 'research-workbench: workspace service');
   await runtime.start();
-  for (const path of ROUTES) ctx.effect(() => ctx.connection.fetch.register({ path, methods: /\/(mutate|host-status|word)$/.test(path) ? ['POST'] : ['GET'], requestBody: 'buffered', fetch: (request) => runtime.handle(request) }), `research-workbench: ${path}`);
-  const hostReceipt = () => runtime.recordDiagnostic('desktop-server-latest', { version: '0.7.1', implementationVersion:'0.8.0', pid: process.pid, node: process.versions.node, executable: process.execPath, routes: ROUTES.length, integrations: { ...runtime.integrations } }).catch(() => {});
+  for (const path of ROUTES) ctx.effect(() => ctx.connection.fetch.register({ path, methods: /\/(mutate|host-status|word|word-control)$/.test(path) ? ['POST'] : ['GET'], requestBody: 'buffered', fetch: (request) => runtime.handle(request) }), `research-workbench: ${path}`);
+  const hostReceipt = () => runtime.recordDiagnostic('desktop-server-latest', { version: '0.7.1', implementationVersion:'0.11.0', pid: process.pid, node: process.versions.node, executable: process.execPath, routes: ROUTES.length, integrations: { ...runtime.integrations } }).catch(() => {});
   void hostReceipt();
   ctx.effect(() => runtime.onMutation(() => queueMicrotask(() => void hostReceipt())), 'research-workbench: local startup receipt');
   ctx.plugin({ inject: ['agents', 'tools'], async apply(scope) {
@@ -39,7 +38,7 @@ export async function apply(ctx, config = {}) {
   } });
   ctx.plugin({ inject: ['agents', 'tools', 'systemPrompt', 'workspaceRegistry', 'sessionController'], async apply(scope) {
     let connecting=null;
-    const reconnect=()=>{if(runtime.nativeWriting.validateSession&&runtime.wordFormatting.ready)return Promise.resolve();if(connecting)return connecting;connecting=installNativeSentenceWriting(scope,runtime).then(()=>installWordFormatting(scope,runtime)).then(()=>hostReceipt()).catch(async error=>{runtime.integrations.nativeSentence='unavailable';await runtime.recordDiagnostic('native-connection-latest',{status:'unavailable',reason:/schema/i.test(error.message||'')?'TOOL_SCHEMA_INVALID':'NATIVE_SETUP_FAILED'});throw error}).finally(()=>{connecting=null});return connecting};
+    const reconnect=()=>{if(runtime.nativeWriting.validateSession)return Promise.resolve();if(connecting)return connecting;connecting=installNativeSentenceWriting(scope,runtime).then(()=>hostReceipt()).catch(async error=>{runtime.integrations.nativeSentence='unavailable';await runtime.recordDiagnostic('native-connection-latest',{status:'unavailable',reason:/schema/i.test(error.message||'')?'TOOL_SCHEMA_INVALID':'NATIVE_SETUP_FAILED'});throw error}).finally(()=>{connecting=null});return connecting};
     runtime.reconnectNativeSentence=reconnect;
     scope.effect(()=>()=>{if(runtime.reconnectNativeSentence===reconnect)runtime.reconnectNativeSentence=null},'research-workbench: native reconnection');
     try { await reconnect(); }

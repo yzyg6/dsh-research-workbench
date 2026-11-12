@@ -8,19 +8,20 @@ import { DEFAULT_REVISION_PROMPT, PROMPT_TEMPLATES } from '../shared/revision-re
 
 export const DEFAULT_PROMPT = DEFAULT_REVISION_PROMPT;
 
-export function RevisionPanel({ anchor, job, busy, error, onGenerate, onAction, onClassify, onClose, onImport, modelReady, currentRevision, workingCopy=false, embedded = false }) {
+export function RevisionPanel({ anchor, job, busy, error, onGenerate, onAction, onClassify, onEditSuggestion, onEditingChange, onClose, onImport, modelReady, currentRevision, workingCopy=false, embedded = false }) {
   const [instruction, setInstruction] = React.useState(DEFAULT_PROMPT);
   const [template,setTemplate]=React.useState('scientific');
   const [keywords, setKeywords] = React.useState('');
   const [advanced, setAdvanced] = React.useState(false);
   const [refining, setRefining] = React.useState(false);
   const [imported, setImported] = React.useState('');
+  const [editingSuggestion,setEditingSuggestion]=React.useState(false);
   const fileRef = React.useRef(null);
   const bodyRef = React.useRef(null);
   const [viewport, setViewport] = React.useState(() => ({ width: globalThis.window?.innerWidth || 1200, height: globalThis.window?.innerHeight || 800 }));
   React.useEffect(() => { const resize = () => setViewport({ width: window.innerWidth, height: window.innerHeight }); window.addEventListener('resize', resize); return () => window.removeEventListener('resize', resize); }, []);
   const output = job?.output, proposal = output?.proposal;
-  React.useLayoutEffect(() => { if (proposal && bodyRef.current) bodyRef.current.scrollTop = 0; }, [job?.id, proposal?.replacement]);
+  React.useLayoutEffect(() => { if (proposal && bodyRef.current) bodyRef.current.scrollTop = 0; }, [job?.id]);
   const running = ['queued', 'running'].includes(job?.status), pending = output?.review === 'pending';
   const outdated=job?.status==='outdated'||(pending&&Number.isInteger(currentRevision)&&output.expectedRevision!==currentRevision);
   const undoOutdated=output?.review==='adopted'&&Number.isInteger(currentRevision)&&output.appliedRevision!==currentRevision;
@@ -30,7 +31,7 @@ export function RevisionPanel({ anchor, job, busy, error, onGenerate, onAction, 
   return <aside className={`rw-sentence-panel${embedded ? ' rw-sentence-embedded' : ''}`} role={embedded ? 'region' : 'dialog'} aria-label={embedded ? '改写对照与文献依据' : '选句修改'} style={embedded ? { position: 'static', width: '100%', height: '100%', maxHeight: 'none', border: 0, borderRadius: 0, boxShadow: 'none' } : { left: Math.max(12, Math.min(position.left, viewport.width - 456)), top, maxHeight: viewport.height - top - 16 }} onMouseDown={event => event.stopPropagation()}>
     <header><span className="rw-sentence-mark"><Icon name="write" size={17} /></span><div><strong>{embedded ? '改写对照' : '选句修改'}</strong><small>结合全文 · 检索文献 · 对照采用</small></div>{!embedded && <button className="rw-icon-button" aria-label="关闭选句修改" onClick={onClose}><Icon name="close" size={15} /></button>}</header>
     <div ref={bodyRef} className="rw-sentence-body">
-      {proposal ? <SentenceComparison before={original} after={proposal.replacement} changes={proposal.sentenceChanges} busy={busy} onClassify={onClassify ? data=>onClassify(job.id,data) : undefined}/> : <><div className="rw-sentence-label">已选正文</div><blockquote className="rw-sentence-original">{original}</blockquote></>}
+      {proposal ? <SentenceComparison key={job.id} before={original} after={proposal.replacement} changes={proposal.sentenceChanges} busy={busy} editable={pending&&!outdated&&job.status==='succeeded'} onEditingChange={value=>{setEditingSuggestion(value);onEditingChange?.(value)}} onEdit={onEditSuggestion?data=>onEditSuggestion(job.id,data):undefined} onClassify={onClassify ? data=>onClassify(job.id,data) : undefined}/> : <><div className="rw-sentence-label">已选正文</div><blockquote className="rw-sentence-original">{original}</blockquote></>}
       {anchor && (!proposal || refining) && !output?.review?.match(/adopted|undone/) && <><PromptPicker value={template} disabled={running||busy} onChange={id=>{setTemplate(id);setInstruction(PROMPT_TEMPLATES.find(item=>item.id===id).prompt)}}/><label className="rw-sentence-label" htmlFor="rw-sentence-request">你的修改要求</label><textarea id="rw-sentence-request" aria-label="句子修改要求" placeholder="例如：更简洁；强调研究意义；核对因果关系……" value={instruction} onChange={event => setInstruction(event.target.value)} maxLength={6000} disabled={running || busy} /><div className="rw-sentence-presets">{['更简洁', '增强逻辑衔接', '核对证据与措辞'].map(text => <button key={text} disabled={running || busy} onClick={() => setInstruction(text)}>{text}</button>)}</div>
       <button className="rw-sentence-disclosure" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}><Icon name="search" size={12} />文献检索设置<Icon name="down" size={10} /></button>
       {advanced && <div className="rw-sentence-retrieval"><label>文献关键词（可选）<input aria-label="文献关键词" value={keywords} maxLength={500} onChange={event => setKeywords(event.target.value)} placeholder="留空则从选句提取，支持中英文关键词" /></label><p>优先检索 Zotero MCP 全文与本地已解析文献。关键词命中后，再判断证据是否支持表达。</p><button className="rw-quiet" disabled={busy || running} onClick={() => fileRef.current.click()}><Icon name="upload" size={12} />添加已解析文献 Markdown</button><input hidden ref={fileRef} type="file" accept=".md,.markdown,.txt" aria-label="添加本地文献" onChange={async event => { const file = event.target.files[0]; if (!file) return; try { if (file.size > 1024 * 1024) throw new Error('文献文件上限为 1 MiB。'); await onImport({ title: file.name, text: await file.text() }); setImported(`已加入共享文献库：${file.name}`); } catch (error) { setImported(error.message); } event.target.value = ''; }} />{imported && <p role="status">{imported}</p>}</div>}
@@ -49,14 +50,15 @@ export function RevisionPanel({ anchor, job, busy, error, onGenerate, onAction, 
 </>}
       {running && <button className="rw-quiet" onClick={() => onAction('cancelJob', job.id)}>取消本次生成</button>}
     </div>
-    {proposal && <div className="rw-sentence-review">{pending && <button className="rw-primary" disabled={busy || outdated || job.status !== 'succeeded'} onClick={() => onAction('applySentence', job.id)}><Icon name="check" size={14} />采用修改{job.native ? '（Ctrl+Alt+A）' : ''}</button>}{output.review === 'adopted' && <><span><Icon name="check" size={13} />{workingCopy?'已保存到工作副本':`已保存 v${output.appliedRevision}`}</span><button className="rw-secondary" disabled={busy||undoOutdated} onClick={() => onAction('undoSentence', job.id)}>撤回本次采用{job.native ? '（Ctrl+Alt+Z）' : ''}</button></>}{output.review === 'undone' && <span>已撤回 · 修改历史保留</span>}{pending && <button className="rw-quiet" onClick={onClose}>保留原文</button>}</div>}
+    {proposal && <div className="rw-sentence-review">{pending && <button className="rw-primary" disabled={busy || editingSuggestion || outdated || job.status !== 'succeeded'} onClick={() => onAction('applySentence', job.id)}><Icon name="check" size={14} />采用修改{job.native ? '（Ctrl+Alt+A）' : ''}</button>}{output.review === 'adopted' && <><span><Icon name="check" size={13} />{workingCopy?'已保存到工作副本':`已保存 v${output.appliedRevision}`}</span><button className="rw-secondary" disabled={busy||undoOutdated} onClick={() => onAction('undoSentence', job.id)}>撤回本次采用{job.native ? '（Ctrl+Alt+Z）' : ''}</button></>}{output.review === 'undone' && <span>已撤回 · 修改历史保留</span>}{pending && <button className="rw-quiet" onClick={onClose}>保留原文</button>}</div>}
     <footer>{workingCopy?'采用后更新同一 Word 工作副本 · 支持撤回':'只有采用后才替换原句 · 每次修改保留版本'}</footer>
   </aside>;
 }
 
-export function SentenceEditor({ text, object, project, jobs, modelReady, onText, onRevise, onAction, onClassify, onImport, nativeRender, onNativePrepare, onRefresh, initialNativeJobId, onNativeOpen, onOpenConversation, resolveImage }) {
+export function SentenceEditor({ text, object, project, jobs, modelReady, onText, onRevise, onAction, onClassify, onEditSuggestion, onImport, nativeRender, onNativePrepare, onRefresh, initialNativeJobId, onNativeOpen, onOpenConversation, resolveImage }) {
   const conversations=(project.writingConversations||[]).filter(thread=>thread.objectId===object.id);
   const element = React.useRef(null), editor = React.useRef(null), callbacks = React.useRef({ onText });
+  const suggestionEditing=React.useRef(false);
   callbacks.current = { onText };
   const [selection, setSelection] = React.useState(null), [jobId, setJobId] = React.useState(null), [notice, setNotice] = React.useState('');
   const [error, setError] = React.useState(''), [busy, setBusy] = React.useState(false), [history, setHistory] = React.useState(false);
@@ -108,7 +110,7 @@ export function SentenceEditor({ text, object, project, jobs, modelReady, onText
   };
   const close = async () => { setSelection(null); setJobId(null); setError(''); await onNativeOpen?.(null); };
   const openConversation = async (options = {}) => { try { setBusy(true); setError(''); const previous = !Object.keys(options).length && jobs?.find(item => item.id === (lastNativeJob.current || initialNativeJobId) && item.native && item.objectId === object.id && !['adopted','undone'].includes(item.output?.review)); const id = previous?.id || await onOpenConversation({ ...options, markdown: editor.current?.getMarkdown() || text }); setSelection(null); setJobId(id); setNativeTab('chat'); setHistory(false); await onNativeOpen?.(id); } catch(error) { setError(error.message); } finally { setBusy(false); } };
-  const act = async (action, id) => { try { setBusy(true); setError(''); await onAction(action, id); if (['applySentence','undoSentence'].includes(action)) { setNotice(action === 'applySentence' ? '修改已保存，对话已收起；可在改写记录中查看或撤回。' : '已撤回本次采用，历史记录保留。'); await close(); } } catch (error) { setError(error.message); } finally { setBusy(false); } };
+  const act = async (action, id) => { if(action==='applySentence'&&suggestionEditing.current){setError('请先保存或取消正在编辑的本句建议。');return} try { setBusy(true); setError(''); await onAction(action, id); if (['applySentence','undoSentence'].includes(action)) { setNotice(action === 'applySentence' ? '修改已保存，对话已收起；可在改写记录中查看或撤回。' : '已撤回本次采用，历史记录保留。'); await close(); } } catch (error) { setError(error.message); } finally { setBusy(false); } };
   const relevant = (jobs || []).filter(job => job.type === 'writing.sentence' && !job.conversationOnly && (job.output?.objectId || job.objectId) === object.id);
   const undoable = relevant.find(item => item.output?.review === 'adopted' && item.output.appliedRevision === object.revision);
   const job = (jobs || []).find(item => item.id === jobId);
@@ -133,8 +135,8 @@ export function SentenceEditor({ text, object, project, jobs, modelReady, onText
       {!job?.conversationOnly && <div className="rw-native-sentence-target"><span>当前选句</span>{job?.original || selection?.selectedText}</div>}
       <nav className="rw-native-sentence-tabs" aria-label="选句修改视图"><button aria-pressed={nativeTab === 'chat'} onClick={() => setNativeTab('chat')}>修改对话</button><button aria-pressed={nativeTab === 'review'} disabled={!job?.output?.proposal} onClick={() => setNativeTab('review')}>修改对照与文献依据{job?.output?.review === 'pending' ? ' · 待复核' : ''}</button></nav>
       {error && <p role="alert" className="rw-sentence-warning">{error}</p>}
-      <div className="rw-native-sentence-columns"><div className="rw-native-sentence-conversation" hidden={nativeTab !== 'chat'}>{job ? nativeRender({ project, job, onError: setError }) : <p className="rw-native-failure">正在保存选区并准备原生会话…</p>}</div>{job?.output?.proposal && <div className="rw-native-sentence-review" hidden={nativeTab !== 'review'}><RevisionPanel job={job} currentRevision={object.revision} embedded busy={busy} error={error} modelReady onAction={act} onClassify={onClassify} onClose={() => setNativeTab('chat')} /></div>}</div>
-    </section> : <RevisionPanel key={`${selection?.from}:${selection?.to}:${selection?.markdown || 'history'}`} anchor={selection} job={job} currentRevision={object.revision} error={error} busy={busy} modelReady={modelReady} onGenerate={generate} onAction={act} onClassify={onClassify} onClose={() => { setSelection(null); setJobId(null); setError(''); }} onImport={onImport} />)}
+      <div className="rw-native-sentence-columns"><div className="rw-native-sentence-conversation" hidden={nativeTab !== 'chat'}>{job ? nativeRender({ project, job, onError: setError }) : <p className="rw-native-failure">正在保存选区并准备原生会话…</p>}</div>{job?.output?.proposal && <div className="rw-native-sentence-review" hidden={nativeTab !== 'review'}><RevisionPanel job={job} currentRevision={object.revision} embedded busy={busy} error={error} modelReady onAction={act} onClassify={onClassify} onEditSuggestion={onEditSuggestion} onEditingChange={value=>{suggestionEditing.current=value}} onClose={() => setNativeTab('chat')} /></div>}</div>
+    </section> : <RevisionPanel key={`${selection?.from}:${selection?.to}:${selection?.markdown || 'history'}`} anchor={selection} job={job} currentRevision={object.revision} error={error} busy={busy} modelReady={modelReady} onGenerate={generate} onAction={act} onClassify={onClassify} onEditSuggestion={onEditSuggestion} onEditingChange={value=>{suggestionEditing.current=value}} onClose={() => { setSelection(null); setJobId(null); setError(''); }} onImport={onImport} />)}
     {!selection && !jobId && error && <p className="rw-sentence-warning" role="alert">{error}</p>}
   </>;
 }

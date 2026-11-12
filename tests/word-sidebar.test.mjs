@@ -12,6 +12,7 @@ test('Word docks the native conversation and two-column review beside its canvas
  assert(html.includes('aria-label="Word 右侧原生修改对话"'));assert(html.includes('原生模型选择器测试替身'));assert(html.includes('Word 对话栏宽度'));assert(html.includes('左右对照与文献依据'));assert(html.includes('aria-label="修改前"'));assert(html.includes('aria-label="修改后"'));assert(!html.includes('role="dialog"'));assert(!html.includes('rw-native-sentence-dialog'));assert(html.includes('title="Wordcraft 论文编辑器"'));
  assert(!html.includes('rw-writing-hint'));assert(!html.includes('rw-writing-conversation-controls'));
  assert(html.includes('aria-label="Word 文档操作"'));assert(html.includes('aria-label="论文对话操作"'));assert(html.includes('新建对话'));assert(html.includes('展开／收起 Word 功能区'));
+ assert(!html.includes('格式修改对话'));assert(!html.includes('rw-word-format-panel'));
 });
 
 test('a saved conversation for a different document is not treated as the current Word selection',()=>{

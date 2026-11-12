@@ -1,4 +1,18 @@
 const KEY='dsh-research-workbench:mottos:v1';
+export const DEFAULT_MOTTO_FONT='毛体';
+export const MAO_FONT_FAMILY='草檀斋毛泽东字体';
+export const MOTTO_FONTS=Object.freeze(['毛体',MAO_FONT_FAMILY,'系统字体','宋体','楷体','华文行楷','微软雅黑','Microsoft YaHei UI','Segoe UI']);
+export function mottoFont(value){
+  const name=(value??DEFAULT_MOTTO_FONT);
+  if(typeof name!=='string'||!name.trim()||name.length>100||/[\x00-\x1f\x7f]/.test(name))throw Error('请填写不超过 100 字的本机字体名称。');
+  return name.trim();
+}
+export function mottoFontFamily(value){
+  const name=mottoFont(value),fallback="var(--rw-ui,system-ui),sans-serif";
+  if(name==='系统字体')return fallback;
+  const families=name===DEFAULT_MOTTO_FONT?[MAO_FONT_FAMILY,'毛体','毛泽东字体','毛泽东书法字体','毛泽东书法体','方正毛体简体','FZMaoTi-G02S','MaoTi','Mao Ti']:[name];
+  return families.map(name=>JSON.stringify(name)).join(',')+','+fallback;
+}
 export const DEFAULT_MOTTOS=Object.freeze([
   '世上无难事，只要肯登攀。——毛泽东《水调歌头·重上井冈山》',
   '雄关漫道真如铁，而今迈步从头越。——毛泽东《忆秦娥·娄山关》',
@@ -24,19 +38,20 @@ export function parseMottoLines(value){
 }
 export function mottoInterval(value){const seconds=Number(value);if(!Number.isInteger(seconds)||seconds<5||seconds>3600)throw Error('切换间隔请设为 5 至 3600 秒。');return seconds}
 export function mottoDisplayText(line){return line.replace(/——[^—]+《[^》]+》$/u,'').trim()}
-export function defaultMottoPreferences(){return {enabled:true,paused:false,intervalSeconds:30,items:[...DEFAULT_MOTTOS]}}
+export function defaultMottoPreferences(){return {enabled:true,paused:false,intervalSeconds:30,fontFamily:DEFAULT_MOTTO_FONT,items:[...DEFAULT_MOTTOS]}}
 export function readMottoPreferences(storage){
   try{
     const value=JSON.parse((storage??globalThis.localStorage)?.getItem(KEY)||'null');
     if(!value||!Array.isArray(value.items)||value.items.some(item=>typeof item!=='string'))return defaultMottoPreferences();
     const items=parseMottoLines(value.items.join('\n'));
-    return {enabled:value.enabled!==false,paused:value.paused===true,intervalSeconds:mottoInterval(value.intervalSeconds??30),items};
+    let fontFamily;try{fontFamily=mottoFont(value.fontFamily)}catch{fontFamily=DEFAULT_MOTTO_FONT}
+    return {enabled:value.enabled!==false,paused:value.paused===true,intervalSeconds:mottoInterval(value.intervalSeconds??30),fontFamily,items};
   }catch{return defaultMottoPreferences()}
 }
 export function writeMottoPreferences(value,storage){
   try{
     const target=storage??globalThis.localStorage;if(!target)return false;
     const items=parseMottoLines(value.items.join('\n'));
-    target.setItem(KEY,JSON.stringify({enabled:Boolean(value.enabled),paused:Boolean(value.paused),intervalSeconds:mottoInterval(value.intervalSeconds??30),items}));return true;
+    target.setItem(KEY,JSON.stringify({enabled:Boolean(value.enabled),paused:Boolean(value.paused),intervalSeconds:mottoInterval(value.intervalSeconds??30),fontFamily:mottoFont(value.fontFamily),items}));return true;
   }catch{return false}
 }
