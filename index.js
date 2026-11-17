@@ -7,6 +7,7 @@ import { installProjectTools } from './src/server/tools.mjs';
 import { installProjectWorkspaces } from './src/server/workspaces.mjs';
 import { installWritingModel } from './src/server/writing-model.mjs';
 import { installNativeSentenceWriting } from './src/server/native-writing.mjs';
+import { installReviewAgents } from './src/server/review-agents.mjs';
 
 export const inject = ["connection"];
 const directory = fileURLToPath(new URL("./validation/", import.meta.url));
@@ -16,9 +17,11 @@ export async function apply(ctx, config = {}) {
   const packageRoot = fileURLToPath(new URL('./', import.meta.url));
   const runtime = new WorkspaceRuntime({ root: config.root || join(process.env.DSH_HOME || join(homedir(), '.dsh'), 'workbenches', 'research'), sampleRoot: join(packageRoot, 'samples/figure'), publicRoot: join(packageRoot, 'public') });
   ctx.effect(() => () => runtime.dispose(), 'research-workbench: workspace service');
+  let ready = false;
+  for (const path of ROUTES) ctx.effect(() => ctx.connection.fetch.register({ path, methods: /\/(mutate|host-status|word|word-control)$/.test(path) ? ['POST'] : ['GET'], requestBody: 'buffered', fetch: (request) => ready ? runtime.handle(request) : Response.json({ code: 'SERVICE_UNAVAILABLE', error: '正在连接本机工作台…' }, { status: 503, headers: { 'retry-after': '1' } }) }), `research-workbench: ${path}`);
   await runtime.start();
-  for (const path of ROUTES) ctx.effect(() => ctx.connection.fetch.register({ path, methods: /\/(mutate|host-status|word|word-control)$/.test(path) ? ['POST'] : ['GET'], requestBody: 'buffered', fetch: (request) => runtime.handle(request) }), `research-workbench: ${path}`);
-  const hostReceipt = () => runtime.recordDiagnostic('desktop-server-latest', { version: '0.7.1', implementationVersion:'0.11.0', pid: process.pid, node: process.versions.node, executable: process.execPath, routes: ROUTES.length, integrations: { ...runtime.integrations } }).catch(() => {});
+  ready = true;
+  const hostReceipt = () => runtime.recordDiagnostic('desktop-server-latest', { version: '0.7.1', implementationVersion:'0.12.9', pid: process.pid, node: process.versions.node, executable: process.execPath, routes: ROUTES.length, integrations: { ...runtime.integrations } }).catch(() => {});
   void hostReceipt();
   ctx.effect(() => runtime.onMutation(() => queueMicrotask(() => void hostReceipt())), 'research-workbench: local startup receipt');
   ctx.plugin({ inject: ['agents', 'tools'], async apply(scope) {
@@ -31,6 +34,10 @@ export async function apply(ctx, config = {}) {
   ctx.plugin({ inject: ['sessionController'], apply(scope) {
     runtime.nativeFileOpener = request => scope.sessionController.openWorkspacePath(request, AbortSignal.timeout(15000));
     scope.effect(() => () => { runtime.nativeFileOpener = null; }, 'research-workbench: native workspace files');
+  } });
+  ctx.plugin({ inject: ['subagents', 'agents', 'agentPresets', 'sessionController'], async apply(scope) {
+    try { await installReviewAgents(scope, runtime); await hostReceipt(); }
+    catch { runtime.integrations.manuscriptReview = 'unavailable'; scope.logger?.warn?.('论文审阅子智能体暂未接入。'); }
   } });
   ctx.plugin({ inject: ['llm', 'agentDefaultModel'], async apply(scope) {
     try { await installWritingModel(scope, runtime); await hostReceipt(); }

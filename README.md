@@ -1,13 +1,14 @@
 # DSH 科研论文工作台
 
-面向 DSH Desktop 的科研写作插件，将项目资料、Word 编辑和论文修改对话放在同一个工作空间中。当前版本：**0.11.0**。
+面向 DSH Desktop 的科研写作插件，将项目资料、Word 编辑和论文修改对话放在同一个工作空间中。当前源码版本为 **0.12.9**。
 
 ## 功能
 
 - 以论文为单位管理项目，关联已有目录，浏览文稿、数据、图片和参考资料；移除项目入口时保留原文件。
-- 内嵌 Wordcraft 编辑 DOCX，默认缩放 95%，按需加载中文字体。
+- 内嵌 Wordcraft 编辑 DOCX，预加载常用资源，重新进入时恢复上次的阅读位置和光标。默认缩放 95%，按需加载中文字体。
 - 逐句左右对照修改建议，以中科院蓝高亮具体改动，支持采用与撤回。
-- 对照中的改后句子可点击“编辑本句”，保存后再采用；四级修改使用绿、蓝、橙、红底色。Word 采用与撤回优先在当前文档实例更新，保留原段落和滚动位置，保存时正文持续可见。
+- 对照支持逐句编辑段落建议、逐段编辑小节建议。采用前可以核对修改理由和影响程度。常规审阅改稿直接更新当前 Word 文档并保留位置。
+- 审阅可按小节调度 DSH 子智能体，汇总关联建议并写入 Word 批注。勾选建议批量生成改稿后，在对照中逐条编辑、采用或跳过。采用与撤回会同步对应的 Word 批注状态。
 - 连续划句复用原生对话，切换模板立即更新自动生成的提示词，并保留手写要求；建议完成后直接通知界面。“关联”按需加载，DOCX 检查复用处理进程，Git 历史批量写入，减少交互链上的等待。
 - 一篇论文对应一个 DSH 原生工作区，不同 Word 文件各自绑定独立对话；空对话也可显示，无需自动发送消息。
 - 明确区分原稿与工作区版本。首次修改生成工作副本，后续持续更新同一个文件，并用本地 Git 记录文稿历史。
@@ -28,7 +29,7 @@ cd dsh-research-workbench
 
 通过 DSH Desktop 当前 profile 的插件管理入口，从本地目录安装该项目。仓库已经包含客户端构建和 Wordcraft Web 运行资源。插件更新后，先保存文稿，再重新加载插件或重启 DSH，使前后端同时更新。
 
-也可从 [v0.11.0 发布页](https://github.com/yzyg6/dsh-research-workbench/releases/tag/v0.11.0) 下载 `dsh-research-workbench-v0.11.0.zip`，解压后选择内含 `package.json` 的 `dsh-research-workbench` 文件夹安装。下载包已包含构建产物，无需自行安装前端依赖或编译。
+历史安装包可从 [v0.11.0 发布页](https://github.com/yzyg6/dsh-research-workbench/releases/tag/v0.11.0) 下载。要安装当前源码版本，请使用上面的仓库地址。
 
 若“保存本句”提示后台尚未加载保存接口，表示客户端已更新但运行中的 Host 仍是旧版。请先保留尚未保存的输入并保存当前文稿，再重新加载插件或重启 DSH，使前后端更新到同一版本。0.11.0 已包含完整的句子建议保存接口及版本不匹配提示。
 
@@ -74,9 +75,19 @@ Wordcraft、React、Tiptap、KaTeX 及分发字体的版本、来源和许可见
 
 ## 性能复测
 
+打开时优先校验和加载当前资料。其他文件的正文与表格预览在选中后加载。暂时未就绪的服务会在 20 秒内自动重连，仍不可用时可点击“重新连接”。
+
+启动与连续打开验收（隔离的合成项目，含两次启动故障注入）：
+
+```bash
+node --test tests/startup.test.mjs tests/startup-ui.test.mjs
+node probes/startup/browser.mjs
+```
+
 ```bash
 node probes/word-edit/workflow-perf.mjs --enforce
 node probes/word-edit/live-browser.mjs --review --enforce
+node probes/word-edit/live-browser.mjs --manuscript-batch
 ```
 
-第二项使用 Windows 上的 Edge 无头浏览器运行真实 Wordcraft WASM 和 React，全部材料位于 `_scratch/out/`，不调用模型。记录划句到提示词、建议通知、保存及位置保持；本地性能数字不包含模型生成或外部文献检索等待。
+浏览器测试使用 Windows 上的 Edge 无头模式运行真实 Wordcraft WASM 和 React，合成材料位于 `_scratch/out/`。测试覆盖划句到提示词、建议通知、逐条编辑和采用，以及 Word 批注同步。

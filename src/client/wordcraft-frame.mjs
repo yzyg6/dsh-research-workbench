@@ -35,8 +35,8 @@ export function wordcraftFrame({hostOrigin,moduleUrl,installFont}) {
       try{
         chineseFont=event.data.font;
         const module=await import(moduleUrl);
-        const bytes=await new Response(new Blob([event.data.bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
-        const wasm=await module.default({module_or_path:bytes});
+        const compiled=event.data.module||await new Response(new Blob([event.data.bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+        const wasm=await module.default({module_or_path:compiled});
         window.wasmBindings=module;window.wordcraftMemoryBytes=()=>wasm.memory?.buffer.byteLength||0;
         post({type:'rw-wordcraft-memory',wasmBytes:wasm.memory?.buffer.byteLength||0});
         dispatchEvent(new CustomEvent('TrunkApplicationStarted',{detail:{wasm}}));

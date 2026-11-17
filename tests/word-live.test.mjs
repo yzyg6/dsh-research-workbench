@@ -70,3 +70,9 @@ test('actions validate fields and units, rejecting scripts, raw commands and unr
   assert.deepEqual(wordCommand({action:'font',fontFamily:'宋体',latinFontFamily:'Times New Roman',scope:'all'}),{command:'format.font',params:{eastAsia:'SimSun',name:'Times New Roman'}});
   for(const action of[{action:'size',scope:'all',fontSizePt:NaN},{action:'font',scope:'all',fontFamily:'<script>'},{action:'document.setText',scope:'all'},{action:'align',scope:'all',alignment:'center',path:'other.docx'},{action:'bold',scope:'all'},{action:'indents',scope:'all'}])assert.throws(()=>wordCommand(action));
 });
+
+test('a transient Word control outage clears its connection banner on the next successful poll',async()=>{
+  const events=[];let polls=0;
+  const disconnect=connectWordLive({api:{async wordControl(_action,data){if(data.release)return{};if(++polls===1)throw Object.assign(Error('工作台连接暂未恢复'),{code:'SERVICE_UNAVAILABLE'});return{request:null}}},owner,editor:{},lock(){},onError:message=>events.push(['editor-error',message]),onConnectionError:message=>events.push(['offline',message]),onRecovered:()=>events.push(['online'])});
+  try{await new Promise(resolve=>setTimeout(resolve,850));assert(events.some(([type])=>type==='offline'));assert(events.some(([type])=>type==='online'));assert(!events.some(([type])=>type==='editor-error'),'a transport outage must not become a sticky document error')}finally{disconnect()}
+});

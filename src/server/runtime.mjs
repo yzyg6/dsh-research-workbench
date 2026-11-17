@@ -13,11 +13,12 @@ import {WordLiveControl} from './word-live.mjs';
 import {selectionWithText} from '../shared/word-sentence-update.mjs';
 import { WordPreview } from './word-preview.mjs';
 import { revisionAction, systemFonts, systemFont } from './revision-service.mjs';
+import { ManuscriptReview } from './manuscript-review.mjs';
 
 export { PREFIX };
 const testMarker = (value) => typeof value === 'string' && /^RW-[AB]-(WRITE|FIGURE|READ)-20261109$/.test(value) ? value : null;
 export const WORDCRAFT_FILES = ['wordcraft-0.17.0-bridge.js','wordcraft-0.17.0.wasm.gz','version.json','NotoSansCJKsc-Regular.woff2'];
-export const ROUTES = ['word', 'word-control', ...WORDCRAFT_FILES.map(name=>'wordcraft/'+name), 'state', 'mutate', 'versions', 'asset', 'app', 'app.js', 'host-status'].map((name) => `${PREFIX}/${name}`);
+export const ROUTES = ['word', 'word-control', 'review-status', ...WORDCRAFT_FILES.map(name=>'wordcraft/'+name), 'state', 'mutate', 'versions', 'asset', 'app', 'app.js', 'host-status'].map((name) => `${PREFIX}/${name}`);
 const response = (value, status = 200) => Response.json(value, { status, headers: { 'cache-control': 'no-store' } });
 
 export function boundProjectContext(store, agentId, { objectId } = {}) {
@@ -38,6 +39,7 @@ export class WorkspaceRuntime {
     this.nativeWriting = new NativeSentenceWriting(this);
     this.wordPreview = new WordPreview(this.store);
     this.wordEditing = new WordEditing(this.store);
+    this.review = new ManuscriptReview(this);
     this.wordFormatting=new WordFormatting(this);
     this.wordLive=new WordLiveControl(this);
     this.runner.handlers.set('writing.sentence', (row, signal) => this.writing.run(row, signal));
@@ -45,14 +47,14 @@ export class WorkspaceRuntime {
     this.integrations = { projectTools: 'not-mounted', attachedSessions: 0, sentenceModel: 'not-mounted' };
     this.diagnosticTail = Promise.resolve();
   }
-  async start() { await this.runner.start(); }
+  async start() { await this.runner.start(); await this.review.recover(); }
   stamp() {
     return JSON.stringify([this.store.db.prepare('SELECT total_changes() value').get().value, this.store.db.prepare('SELECT max(updated_at) value FROM projects').get().value, this.store.db.prepare('SELECT max(updated_at) value FROM jobs').get().value, this.store.db.prepare('SELECT sum(revision) value FROM task_states').get().value, this.store.db.prepare('SELECT max(updated_at) value FROM bindings').get().value, this.store.db.prepare("SELECT value FROM preferences WHERE key='activeProjectId'").get()?.value, this.integrations, [...(this.store.workspaceFiles?.errors || [])]]);
   }
-  async viewState() {
+  async viewState(options) {
     for(let attempt=0;attempt<3;attempt++){
-      const stamp=this.stamp(),state=await this.store.state();
-      for(const project of state.projects){project.writingConversations=this.nativeWriting.conversations(project.id);project.activeWritingSessionId=this.nativeWriting.thread(project.id)?.sessionId||null;project.writingThreads=Object.fromEntries(project.objects.filter(o=>o.kind==='manuscript').map(o=>[o.id,this.nativeWriting.thread(project.id,o.id)]).filter(([,thread])=>thread));project.formattingThreads=Object.fromEntries(project.objects.filter(o=>o.kind==='manuscript').map(o=>[o.id,this.wordFormatting.thread(project.id,o.id)]).filter(([,thread])=>thread))}
+      const stamp=this.stamp(),state=await this.store.state(options);
+      for(const project of state.projects){project.writingConversations=this.nativeWriting.conversations(project.id);project.activeWritingSessionId=this.nativeWriting.thread(project.id)?.sessionId||null;project.writingThreads=Object.fromEntries(project.objects.filter(o=>o.kind==='manuscript').map(o=>[o.id,this.nativeWriting.thread(project.id,o.id,project.writingConversations)]).filter(([,thread])=>thread));project.formattingThreads=Object.fromEntries(project.objects.filter(o=>o.kind==='manuscript').map(o=>[o.id,this.wordFormatting.thread(project.id,o.id)]).filter(([,thread])=>thread))}
       const nativeAcceptance=this.trustedTransport?await nativeAcceptancePlan(this.store):null;
       // Never label an older async snapshot with a newer stamp: that would make
       // the client skip every subsequent refresh. Under sustained writes, return
@@ -78,9 +80,20 @@ export class WorkspaceRuntime {
     });
     this.diagnosticTail = operation.catch(() => {}); return operation;
   }
-  async mutate(action, data) {
+  async mutate(action, data, stateOptions) {
     let actionResult;
     switch (action) {
+      case 'startManuscriptReview': return { actionResult: await this.review.start(data) };
+      case 'resumeManuscriptReview': return { actionResult: await this.review.resume(data) };
+      case 'pauseManuscriptReview': return { actionResult: this.review.pause(data) };
+      case 'followManuscriptReview': return { actionResult: await this.review.follow(data) };
+      case 'decideManuscriptReview': return { actionResult: await this.review.decide(data) };
+      case 'locateReviewFinding': return { actionResult: await this.review.target({ ...data, scope: 'locate' }) };
+      case 'prepareReviewRevision': actionResult = await this.review.target({ ...data, scope: data.scope === 'chapter' ? 'chapter' : 'paragraph' }); break;
+      case 'publishReviewComments': actionResult = await this.review.publish(data); break;
+      case 'arrangeReviewRelations': return { actionResult: await this.review.arrangeRelations(data) };
+      case 'startReviewBatch': return { actionResult: await this.review.startBatch(data) };
+      case 'skipReviewBatchItem': return { actionResult: await this.review.skipBatchItem(data) };
       case 'documentHistory': case 'documentHistoryDetail': case 'reviewReminders':
         return {actionResult:await revisionAction(this,action,data)};
       case 'restoreDocumentHistory': case 'checkReminder': case 'classifySentence': case 'editSentenceSuggestion':
@@ -132,9 +145,15 @@ export class WorkspaceRuntime {
       case 'applySentence': case 'undoSentence': {
         const row=this.writing.row(data.projectId,data.jobId),input=JSON.parse(row.input),before=JSON.parse(row.output||'null'),apply=action==='applySentence';
         if(input.format!=='docx'){await (apply?this.writing.apply(data):this.writing.undo(data));break}
-        await (apply?this.wordEditing.apply(this.writing,data):this.wordEditing.undo(this.writing,data));
-        const output=JSON.parse(this.writing.row(data.projectId,data.jobId).output);
-        actionResult={wordUpdate:{objectId:input.objectId,fromRevision:apply?input.expectedRevision:before.appliedRevision,revision:apply?output.appliedRevision:output.undoneRevision,selection:selectionWithText(input.wordSelection,apply?input.wordSelection.text:before.proposal.replacement),replacement:apply?output.proposal.replacement:input.wordSelection.text}};break;
+        const result=await (apply?this.wordEditing.apply(this.writing,data):this.wordEditing.undo(this.writing,data));
+        const changed=this.writing.row(data.projectId,data.jobId),output=JSON.parse(changed.output);
+        const wordUpdate={objectId:input.objectId,fromRevision:apply?output.expectedRevision:before.appliedRevision,revision:apply?output.appliedRevision:output.undoneRevision};
+        const comment=apply?output.wordReviewComment:before.wordReviewComment==='resolved'?'restored':null;
+        if(comment)wordUpdate.reviewComment=comment;
+        if(result?.liveRevision)wordUpdate.liveRevision=result.liveRevision;
+        if(input.conversationKind==='chapter'||input.wordComments||input.batchTarget||comment) wordUpdate.reopen=true;
+        else Object.assign(wordUpdate,{selection:selectionWithText(input.wordSelection,apply?input.wordSelection.text:before.proposal.replacement),replacement:apply?output.proposal.replacement:input.wordSelection.text});
+        actionResult={wordUpdate,...(input.batchTarget?{job:this.store.publicJob(changed)}:{})};break;
       }
       case 'importLiterature': await this.writing.evidence.import(data); break;
       case 'saveTaskState': if (data.task === 'writing' && data.patch?.sentenceJobId) await this.nativeWriting.activate({ projectId: data.projectId, jobId: data.patch.sentenceJobId }); await this.store.saveTaskState(data); break;
@@ -146,7 +165,7 @@ export class WorkspaceRuntime {
       default: throw new StoreError('UNKNOWN_ACTION', '工作台不支持这个操作。');
     }
     for (const listener of this.listeners) { try { listener(); } catch { /* Optional native integrations cannot invalidate a committed save. */ } }
-    const state = await this.viewState();
+    const state = await this.viewState(stateOptions);
     return actionResult ? { ...state, actionResult } : state;
   }
   async handle(request) {
@@ -155,6 +174,12 @@ export class WorkspaceRuntime {
       if (request.method === 'POST' && !this.trustedTransport && request.headers.get('origin') && request.headers.get('origin') !== url.origin) return response({ error: '请求来源与本机工作台不一致。' }, 403);
       const name = url.pathname.slice(PREFIX.length + 1);
       if (!url.pathname.startsWith(PREFIX + '/')) return response({ error: '未找到工作台入口。' }, 404);
+      if (name === 'review-status' && request.method === 'GET') {
+        const owner={projectId:url.searchParams.get('projectId'),objectId:url.searchParams.get('objectId'),jobId:url.searchParams.get('jobId')};
+        const findingId=url.searchParams.get('findingId');
+        if(findingId)return response(this.review.batchProposal({...owner,findingId}));
+        return response(url.searchParams.get('batch')==='1'?this.review.batchView(owner):this.review.status(owner));
+      }
       if(name==='word-control'&&request.method==='POST'){
         if(!request.headers.get('content-type')?.startsWith('application/json'))return response({error:'操作请求必须为 JSON。'},415);
         const raw=await request.text();if(Buffer.byteLength(raw)>2*1024*1024)return response({error:'Word 回执过大。'},413);
@@ -171,14 +196,16 @@ export class WorkspaceRuntime {
         const length=Number(request.headers.get('content-length'));if(length>32*1024*1024)return response({error:'Word 超过32 MiB。'},413);
         const chunks=[];let total=0;const reader=request.body?.getReader();if(!reader)return response({error:'Word 内容为空。'},400);
         try{for(;;){const {done,value}=await reader.read();if(done)break;total+=value.byteLength;if(total>32*1024*1024){await reader.cancel();return response({error:'Word 超过32 MiB。'},413)}chunks.push(value)}}finally{reader.releaseLock()}
-        await this.wordEditing.save({projectId:url.searchParams.get('projectId'),objectId:url.searchParams.get('objectId'),expectedRevision:Number(url.searchParams.get('expectedRevision')),bytes:Buffer.concat(chunks,total)});
+        const objectId=url.searchParams.get('objectId');
+        const result=await this.wordEditing.saveInteractive({projectId:url.searchParams.get('projectId'),objectId,expectedRevision:Number(url.searchParams.get('expectedRevision')),bytes:Buffer.concat(chunks,total)});
         for(const listener of this.listeners){try{listener()}catch{}}
-        return response(await this.viewState());
+        const state=await this.viewState({summary:request.headers.get('x-research-state')==='summary'});
+        return response(result.reopen?{...state,actionResult:{wordUpdate:{objectId,revision:result.revision,reopen:true}}}:state);
       }
       if (name === 'app' && request.method === 'GET') return new Response(await readFile(join(this.publicRoot, 'index.html')), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
       if (name === 'app.js' && request.method === 'GET') return new Response(await readFile(join(this.publicRoot, 'app.js')), { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } });
       if(name==='state'&&request.method==='GET'&&url.searchParams.get('watch')==='1')return response(await this.waitForChange(url.searchParams.get('stamp'),request.signal));
-      if (name === 'state' && request.method === 'GET') return response(url.searchParams.get('word') === '1' ? await this.wordPreview.status(url.searchParams.get('projectId'),url.searchParams.get('objectId')) : url.searchParams.get('tree') === '1' ? await this.store.workspaceFiles.list(url.searchParams.get('projectId'), url.searchParams.get('directory') || '', { offset: Number(url.searchParams.get('offset') || 0) }) : url.searchParams.get('stamp') === '1' ? { stamp: this.stamp() } : await this.viewState());
+      if (name === 'state' && request.method === 'GET') return response(url.searchParams.get('word') === '1' ? await this.wordPreview.status(url.searchParams.get('projectId'),url.searchParams.get('objectId')) : url.searchParams.get('tree') === '1' ? await this.store.workspaceFiles.list(url.searchParams.get('projectId'), url.searchParams.get('directory') || '', { offset: Number(url.searchParams.get('offset') || 0) }) : url.searchParams.get('stamp') === '1' ? { stamp: this.stamp() } : await this.viewState({ summary: url.searchParams.get('summary') === '1' }));
       if (name === 'host-status' && request.method === 'POST') {
         const raw = await request.text(); if (raw.length > 32000) return response({ error: '状态记录过长。' }, 413);
         let body; try { body = JSON.parse(raw); } catch { return response({ error: '状态记录格式不正确。' }, 400); }
@@ -208,7 +235,7 @@ export class WorkspaceRuntime {
         if (Buffer.byteLength(raw) > 2 * 1024 * 1024) return response({ error: '请求内容超过当前上限。' }, 413);
         let body; try { body = JSON.parse(raw); } catch { return response({ error: '请求内容不是有效 JSON。' }, 400); }
         if (!body || typeof body.action !== 'string' || !body.data || typeof body.data !== 'object' || Array.isArray(body.data)) return response({ error: '操作格式不正确。' }, 400);
-        return response(await this.mutate(body.action, body.data));
+        return response(await this.mutate(body.action, body.data, { summary: request.headers.get('x-research-state') === 'summary' }));
       }
       return response({ error: '未找到对应工作台操作。' }, 404);
     } catch (error) {
@@ -216,5 +243,5 @@ export class WorkspaceRuntime {
       return response({ error: '本机资料操作未完成，原记录与输入应保留。', code: 'WORKSPACE_IO_ERROR' }, 500);
     }
   }
-  async dispose() { this.wordLive.dispose();this.disposeNativeConversationVisibility?.();this.listeners.clear(); await this.wordPreview.dispose(); await this.wordEditing.tail; await this.runner.stop(); await this.diagnosticTail; await this.store.close(); }
+  async dispose() { this.wordLive.dispose();this.disposeNativeConversationVisibility?.();this.listeners.clear(); await this.review.stop(); await this.wordPreview.dispose(); await this.wordEditing.tail; await this.runner.stop(); await this.diagnosticTail; await this.store.close(); }
 }

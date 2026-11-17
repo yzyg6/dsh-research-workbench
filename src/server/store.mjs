@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile, realpath, stat, readdir } from 'node:fs/pro
 import { resolve, relative, join, isAbsolute, dirname, basename } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { TASKS, defaultTaskState, normalizeLayout } from '../shared/model.mjs';
+import { TASKS, defaultTaskState, normalizeLayout, objectForTask } from '../shared/model.mjs';
 import { WorkspaceFiles, fileHash, MIME } from './workspace-files.mjs';
 import { DocumentHistory } from './document-history.mjs';
 
@@ -122,17 +122,26 @@ export class ProjectStore {
     return path;
   }
   async bytesFor(row) { return readFile(await this.projectPath(row.project_id, row.path)); }
-  async state() {
+  async state({ summary = false } = {}) {
     await this.tail;
     const projects = [];
-    for (const row of this.projectRows()) {
-      try { await this.workspaceFiles.ensure(row.root_path); } catch (error) { this.workspaceFiles.errors.set(row.id, error.message); }
+    const rows = this.projectRows();
+    const active = this.db.prepare("SELECT value FROM preferences WHERE key='activeProjectId'").get()?.value;
+    const activeId = rows.some(row => row.id === active) ? active : rows[0]?.id;
+    for (const row of rows) {
+      if (!summary || row.id === activeId) {
+        try { await this.workspaceFiles.ensure(row.root_path); } catch (error) { this.workspaceFiles.errors.set(row.id, error.message); }
+      }
+      const taskStates = Object.fromEntries(this.db.prepare('SELECT * FROM task_states WHERE project_id=?').all(row.id).map(task => [task.task, { revision: task.revision, value: parse(task.value) }]));
+      const items = this.db.prepare('SELECT * FROM objects WHERE project_id=? ORDER BY created_at,rowid').all(row.id);
+      const selectedId = summary && row.id === activeId ? objectForTask({ objects: items, taskStates }, row.active_task)?.id : null;
       const objects = [];
-      for (const item of this.db.prepare('SELECT * FROM objects WHERE project_id=? ORDER BY created_at,rowid').all(row.id)) {
+      for (const item of items) {
+        const load = !summary || item.id === selectedId;
         let text = '', contentError = null;
         const metadata = parse(item.metadata);
         if (item.kind === 'figure' && item.encoding === 'binary' && !metadata.mimeType) metadata.mimeType = 'image/png';
-        try {
+        if (load) try {
           if (item.encoding === 'utf8') { if (metadata.preview !== undefined) text = metadata.preview; else { const bytes = await this.bytesFor(item); assert(hash(bytes) === item.sha256, 'CONTENT_CHANGED', '文件在工作台外发生变化，原版本仍保留。', 409); text = bytes.toString('utf8'); } }
           if (metadata.workspaceFile) {
             const working = await this.projectPath(row.id, metadata.workspaceFile), details = await stat(working);
@@ -142,15 +151,17 @@ export class ProjectStore {
             if (item.kind === 'data' && metadata.preview) text = metadata.preview;
           }
         } catch (error) { contentError = error instanceof StoreError ? error.message : '资料文件暂时不可读取，原记录仍保留。'; }
-        objects.push({ id: item.id, projectId: row.id, kind: item.kind, title: item.title, revision: item.revision, sha256: item.sha256, encoding: item.encoding, text, contentError, metadata, createdAt: item.created_at, updatedAt: item.updated_at });
+        // Preview text can be megabytes across a project. Keep it only on the
+        // visible object; selection mutations return its complete content.
+        if (summary && !load) delete metadata.preview;
+        objects.push({ id: item.id, projectId: row.id, kind: item.kind, title: item.title, revision: item.revision, sha256: item.sha256, encoding: item.encoding, text: load ? text : undefined, ...(summary ? { textLoaded: load } : {}), contentError, metadata, createdAt: item.created_at, updatedAt: item.updated_at });
       }
       projects.push({ id: row.id, title: row.title, question: row.question, journal: row.journal, language: row.language, isDemo: Boolean(row.is_demo), activeTask: row.active_task, rootPath: row.root_path, workspace: { ...this.workspaceFiles.layouts.get(resolve(row.root_path)), checkpointError: this.workspaceFiles.errors.get(row.id) || null }, createdAt: row.created_at, updatedAt: row.updated_at, objects,
-        taskStates: Object.fromEntries(this.db.prepare('SELECT * FROM task_states WHERE project_id=?').all(row.id).map((task) => [task.task, { revision: task.revision, value: parse(task.value) }])),
+        taskStates,
         bindings: Object.fromEntries(this.db.prepare('SELECT * FROM bindings WHERE project_id=?').all(row.id).map((binding) => [binding.task, binding.session_id])),
         dependencies: this.db.prepare('SELECT * FROM dependencies WHERE project_id=?').all(row.id).map((edge) => ({ id: edge.id, sourceId: edge.source_id, targetId: edge.target_id, sourceRevision: edge.source_revision, kind: edge.kind })),
-        jobs: this.db.prepare("SELECT * FROM jobs WHERE project_id=? AND (id IN (SELECT id FROM jobs WHERE project_id=? ORDER BY created_at DESC LIMIT 50) OR id IN (SELECT json_extract(CASE WHEN json_valid(value) THEN value ELSE '{}' END,'$.jobId') FROM preferences WHERE key=? OR key LIKE ? OR key LIKE ?) OR id=(SELECT json_extract(value,'$.sentenceJobId') FROM task_states WHERE project_id=? AND task='writing')) ORDER BY created_at DESC").all(row.id,row.id,`sentenceThread:${row.id}`,`sentenceThread:${row.id}:%`,`formatThread:${row.id}:%`,row.id).map((job) => this.publicJob(job)) });
+        jobs: this.db.prepare("SELECT * FROM jobs WHERE project_id=? AND (id IN (SELECT id FROM jobs WHERE project_id=? AND type<>'writing.review' AND (operation_key NOT LIKE 'review-draft:%' OR json_extract(output,'$.review') IN ('adopted','undone')) ORDER BY created_at DESC LIMIT 50) OR id IN (SELECT json_extract(CASE WHEN json_valid(value) THEN value ELSE '{}' END,'$.jobId') FROM preferences WHERE key=? OR key LIKE ? OR key LIKE ?) OR id=(SELECT json_extract(value,'$.sentenceJobId') FROM task_states WHERE project_id=? AND task='writing')) ORDER BY created_at DESC").all(row.id,row.id,`sentenceThread:${row.id}`,`sentenceThread:${row.id}:%`,`formatThread:${row.id}:%`,row.id).map((job) => this.publicJob(job)) });
     }
-    const active = this.db.prepare("SELECT value FROM preferences WHERE key='activeProjectId'").get()?.value;
     return { schemaVersion: 1, defaultProjectDirectory: join(this.root, 'projects'), activeProjectId: projects.some((p) => p.id === active) ? active : projects[0]?.id || null, projects };
   }
   async createProject(args = {}) {
@@ -378,7 +389,7 @@ export class ProjectStore {
     await this.addDependency({ projectId, sourceId: figureId, targetId: manuscript, kind: 'illustrates' });
     return projectId;
   }
-  publicJob(row) { const input = ['writing.sentence','word.format'].includes(row.type) ? parse(row.input) : null; return { id: row.id, projectId: row.project_id, type: row.type, status: row.status, phase: row.phase, error: row.error, output: row.output ? parse(row.output) : null, createdAt: row.created_at, updatedAt: row.updated_at, parentJobId: row.parent_job_id, ...(input?.native ? { native: true,conversationKind:input.conversationKind||'revision', nativeSessionId: input.nativeSessionId || null, nativeThreadKey: input.nativeThreadKey || input.nativeSessionId || null, conversationOnly: Boolean(input.conversationOnly), objectId: input.objectId, original: input.selectedText, expectedRevision: input.expectedRevision, nativeEvidence: input.evidence || null } : {}) }; }
+  publicJob(row) { const input = ['writing.sentence','word.format'].includes(row.type) ? parse(row.input) : null; return { id: row.id, projectId: row.project_id, type: row.type, status: row.status, phase: row.phase, error: row.error, output: row.output ? parse(row.output) : null, createdAt: row.created_at, updatedAt: row.updated_at, parentJobId: row.parent_job_id, ...(input?.batchFindingId ? { batchFindingId:input.batchFindingId } : {}), ...(input?.native ? { native: true,conversationKind:input.conversationKind||'revision', nativeSessionId: input.nativeSessionId || null, nativeThreadKey: input.nativeThreadKey || input.nativeSessionId || null, conversationOnly: Boolean(input.conversationOnly), objectId: input.objectId, original: input.selectedText, expectedRevision: input.expectedRevision, nativeEvidence: input.evidence || null, ...(input.reviewFinding?{reviewFinding:input.reviewFinding,reviewInstruction:input.instruction}:{}) } : {}) }; }
   async enqueueJob({ projectId, type, operationKey, parentJobId = null }) {
     assert(type === 'project.integrity', 'UNKNOWN_JOB', '当前处理器不支持这个任务。');
     bounded(operationKey, '操作标识', 160); assert(operationKey.trim(), 'INVALID_OPERATION', '操作标识不能为空。');

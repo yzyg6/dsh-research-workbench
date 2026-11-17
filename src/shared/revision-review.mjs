@@ -7,6 +7,15 @@ export const PROMPT_TEMPLATES = [
   { id: 'evidence', title: '证据与科学措辞', prompt: SCIENTIFIC_STYLE + '本轮重点：核对量化表述、比较基准、适用范围和证据强度。没有直接支持的文献不列为依据，疑点列在说明中。' },
 ];
 export const DEFAULT_REVISION_PROMPT = PROMPT_TEMPLATES[0].prompt;
+export const MANUSCRIPT_REVIEW_TEMPLATES = [
+  { id: 'overview', title: '综合审阅（默认）', prompt: '审查研究问题、方法、结果和结论是否衔接。优先标出影响结论可靠性、复现性或读者理解的问题，区分必须修改和可选完善。指出相关段落和需要作者核对的资料。' },
+  { id: 'argument', title: '论证与章节结构', prompt: '沿研究问题、核心论点、证据和结论梳理论证链。找出跳步、重复、论点与证据错位，以及前后小节无法衔接之处。建议具体的段落顺序、过渡或内容取舍，并指出与其他章节的依赖。' },
+  { id: 'methods', title: '方法与可复现性', prompt: '核查数据来源、样本或纳排标准、预处理、变量定义、参数、计算步骤和验证设计是否清楚。对照结果实际采用的方法、单位和统计口径。列出缺失的信息及其影响，明确作者需要补充哪些细节。' },
+  { id: 'results', title: '结果与证据强度', prompt: '逐项核对主要结论与稿件中的数据、比较基准、效应量和不确定性是否对应。标出数值或单位不一致、将相关写成因果、超出适用范围，以及不确定结果被写成确定结论的地方。' },
+  { id: 'discussion', title: '贡献与讨论', prompt: '核查研究贡献是否由已有结果支撑，讨论是否解释了主要发现、可能机制与适用条件。优先标出与研究问题脱节、超出数据支持或重复复述结果的段落，指出需要加强的比较或解释。' },
+  { id: 'terminology', title: '术语与学术表达', prompt: '核对同一概念、缩写、变量、单位和统计措辞在各小节是否统一，检查首次定义和指代是否明确。优先定位影响含义的表述，再指出冗余和歧义，保留原意及科学表述的确定程度。' },
+  { id: 'references', title: '图表与引文对应', prompt: '根据稿件可见的图表标题、表格内容、正文引用和参考文献条目，核对编号、单位、比较对象与引文是否对应。指出正文宣称的发现能否追溯到所引材料，将证据不足的地方标为待核对。' },
+];
 export const CLASSIFICATION_INSTRUCTION = '请另提供 sentenceChanges 数组，按顺序完整覆盖原文和 replacement，每项包含 before、after、kind（unchanged/wording/structure/meaning）、reason。相邻多句可合为一组以表达拆句/并句；before 拼接必须等于原文，after 拼接必须等于 replacement。unchanged 为完全相同；wording 仅词语表达变化；structure 为句式调整且含义不变；meaning 为事实、范围、关系或确定程度改变。不要仅凭字面相似度判断语义。';
 
 export function splitSentences(text) {

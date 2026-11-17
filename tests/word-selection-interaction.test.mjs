@@ -12,7 +12,7 @@ const nativeFile=join(out,'native.cjs');
 esbuild.buildSync({entryPoints:[join(root,'src/client/entry.jsx')],outfile:nativeFile,bundle:true,platform:'node',format:'cjs',loader:{'.css':'text'},alias:{react:reactPath},external:[reactPath],nodePaths:[join(root,'_scratch/tmp/ui-deps/node_modules'),join(root,'_scratch/tmp/editor-deps/node_modules')],logLevel:'silent'});
 const {WordEditor}=createRequire(import.meta.url)(file),{NativeSentenceBody}=createRequire(import.meta.url)(nativeFile),pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
-async function mount(t,{prepare,discussion,backstage=false,resize=false}={}){
+async function mount(t,{prepare,discussion,backstage=false,resize=false,wordControl,autoReady=true}={}){
   const previous=Object.fromEntries(['window','document','location','fetch','IS_REACT_ACT_ENVIRONMENT','ResizeObserver','requestAnimationFrame','cancelAnimationFrame','innerWidth'].map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
   const win=new EventTarget(),doc=new EventTarget(),frameDoc=new EventTarget();frameDoc.activeElement={blur(){}};
   Object.assign(globalThis,{window:win,document:doc,location:{origin:'https://synthetic.invalid'},fetch:async()=>({ok:true,arrayBuffer:async()=>new ArrayBuffer(1)}),IS_REACT_ACT_ENVIRONMENT:true});
@@ -24,11 +24,12 @@ async function mount(t,{prepare,discussion,backstage=false,resize=false}={}){
   const frame={inert:false,contentDocument:frameDoc,contentWindow:{wordcraft:engine,document:frameDoc,postMessage(data){if(data.type==='wordcraft:open'){documentId++;zoom=180}}}};
   const props={api:{mutate:action=>action==='prepareWordEdit'?Promise.resolve({actionResult:{chineseFont:'Noto Sans CJK SC',fontFamilies:[]}}):action==='systemFonts'?Promise.resolve({actionResult:[]}):action==='reviewReminders'?Promise.resolve({actionResult:{reminders:[]}}):new Promise(()=>{}),wordcraftAssets:()=>new Promise(()=>{}),assetUrl:()=>'/synthetic.docx',saveWord:async()=>{saves++;return {projects:[{id:'p_test',objects:[{id:'o_test',revision:2}]}]}}},project:{id:'p_test',title:'合成选句测试',writingConversations:[]},object:{id:'o_test',title:'synthetic.docx',revision:1},registerSave:()=>()=>{},onDirty:()=>{},onSaved:()=>{},sentence:{initialNativeJobId:'j_whole',jobs:[{id:'j_whole',objectId:'o_test',conversationOnly:true}],nativeRender:()=>React.createElement('span',null,'native-conversation-test-double'),onNativePrepare:async args=>{calls++;return prepare?prepare(args):'j_selected'},onNativeOpen:async()=>{},onRefresh:async()=>{}}};
   if(discussion){props.sentence.initialNativeJobId=null;props.sentence.jobs=[];props.sentence.onOpenConversation=discussion}
+  if(wordControl)props.api.wordControl=wordControl;
   t.after(async()=>{if(renderer)await act(async()=>renderer.unmount());for(const [key,value] of Object.entries(previous)){if(value)Object.defineProperty(globalThis,key,value);else delete globalThis[key]}});
   const nativeRender=props.sentence.nativeRender;props.sentence.nativeRender=info=>{nativeRenders++;return nativeRender(info)};
   await act(async()=>{renderer=create(React.createElement(WordEditor,props),{createNodeMock:element=>element.type==='iframe'?frame:element.type==='details'?{open:false,contains:()=>false}:resize&&element.props.className==='rw-word-layout'?boardNode:resize&&element.props.className==='rw-word-sidebar'?sidebarNode:null})});
-  await act(async()=>{send({type:'wordcraft:ready'});await pause(140)});
-  return {resizeFrames,sidebarNode,boardNode,nativeRenders:()=>nativeRenders,zoom:()=>zoom,setZoom:value=>{zoom=value},renderer,frame,props,rerender:async()=>act(async()=>renderer.update(React.createElement(WordEditor,props))),backstage:()=>backstage,filePage:(page='home')=>{backstage=true;backstagePage=page},key:async key=>{const event=new Event('keydown',{cancelable:true});Object.defineProperties(event,{key:{value:key},ctrlKey:{value:true}});await act(async()=>{frameDoc.dispatchEvent(event);await pause(0)});return event},edit:()=>{documentDirty=true},saves:()=>saves,select:value=>{selection=value},calls:()=>calls,pointer:async()=>act(async()=>{frameDoc.dispatchEvent(new Event('pointerup'));await pause(110)}),text:()=>JSON.stringify(renderer.toJSON())};
+  if(autoReady)await act(async()=>{send({type:'wordcraft:ready'});await pause(140)});
+  return {send,resizeFrames,sidebarNode,boardNode,nativeRenders:()=>nativeRenders,zoom:()=>zoom,setZoom:value=>{zoom=value},renderer,frame,props,rerender:async()=>act(async()=>renderer.update(React.createElement(WordEditor,props))),backstage:()=>backstage,filePage:(page='home')=>{backstage=true;backstagePage=page},key:async key=>{const event=new Event('keydown',{cancelable:true});Object.defineProperties(event,{key:{value:key},ctrlKey:{value:true}});await act(async()=>{frameDoc.dispatchEvent(event);await pause(0)});return event},edit:()=>{documentDirty=true},saves:()=>saves,select:value=>{selection=value},calls:()=>calls,pointer:async()=>act(async()=>{frameDoc.dispatchEvent(new Event('pointerup'));await pause(110)}),text:()=>JSON.stringify(renderer.toJSON())};
 }
 const selected={anchor:{para:0,off:0},focus:{para:0,off:12},text:'当前选中的句子。'};
 
@@ -193,4 +194,23 @@ test('the original-file menu explicitly imports the original and switches only a
   view.props.onSelectObject=async item=>{chosen=item.id};await view.rerender();view.edit();
   await act(async()=>{await view.renderer.root.findAll(node=>node.type==='button'&&node.children.includes('打开原始文稿'))[0].props.onClick();await pause(0)});
   assert.equal(chosen,original.id);assert.equal(args.openOriginal,true);assert.equal(args.path,'paper/original.docx');assert.equal(view.saves(),1);
+});
+
+test('the screenshot connection warning clears after recovery without reopening or saving the dirty document',async t=>{
+  let polls=0;
+  const view=await mount(t,{wordControl:async(_action,data)=>{if(data.release)return{};if(++polls===1)throw Object.assign(Error('工作台连接暂未恢复'),{code:'SERVICE_UNAVAILABLE'});return{request:null}}});
+  assert(view.renderer.root.findByProps({'data-word-connection':'offline'}));view.edit();
+  const before=await view.frame.contentWindow.wordcraft.uiInspect();
+  await act(async()=>pause(850));
+  assert.equal(view.renderer.root.findAllByProps({'data-word-connection':'offline'}).length,0);
+  const after=await view.frame.contentWindow.wordcraft.uiInspect();assert.equal(after.document,before.document);assert.equal(after.dirty,true);assert.equal(view.saves(),0);
+});
+
+test('an initial engine failure offers a real retry button without restarting an already edited document',async t=>{
+  const view=await mount(t,{autoReady:false});
+  await act(async()=>view.send({type:'wordcraft:failed',error:'合成引擎启动中断'}));
+  assert(view.text().includes('合成引擎启动中断'));
+  const retry=view.renderer.root.findAll(node=>node.type==='button'&&node.children.includes('重新打开编辑器'))[0];assert(retry);
+  await act(async()=>retry.props.onClick());
+  assert(!view.text().includes('合成引擎启动中断'));assert(view.text().includes('正在加载 Word 编辑器'));assert.equal(view.saves(),0);
 });

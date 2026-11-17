@@ -3,6 +3,8 @@ import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { StoreError } from './store.mjs';
 import { relatedPassages, compareSentences, CHANGE_LABELS } from '../shared/revision-review.mjs';
+import { citationMarkers } from './citation-markers.mjs';
+import { validateProposal } from './writing.mjs';
 
 const FONT_FILES = [
   ['simsun','宋体 / SimSun','simsun.ttc'],['simhei','黑体 / SimHei','simhei.ttf'],
@@ -68,7 +70,7 @@ export async function revisionAction(runtime,action,data){
     });
     case 'classifySentence':return store.write(()=>{
       const row=runtime.writing.row(projectId,data.jobId),output=JSON.parse(row.output||'null');
-      if(!output?.proposal||!Object.hasOwn(CHANGE_LABELS,data.kind))throw new StoreError('INVALID_INPUT','修改分类无效。');
+      if(!output?.proposal||output.originalParagraphs||!Object.hasOwn(CHANGE_LABELS,data.kind))throw new StoreError('INVALID_INPUT','修改分类无效。');
       const rows=compareSentences(output.original,output.proposal.replacement,output.proposal.sentenceChanges),item=rows[data.index];
       if(!item||item.before!==data.before||item.after!==data.after)throw new StoreError('VERSION_CONFLICT','建议已更新，请重新核对分类。',409);
       if((item.before===item.after)!==(data.kind==='unchanged'))throw new StoreError('INVALID_INPUT','仅完全相同的句子可标记为未修改。');
@@ -77,9 +79,24 @@ export async function revisionAction(runtime,action,data){
       store.db.prepare('UPDATE jobs SET output=?,updated_at=? WHERE id=?').run(JSON.stringify(output),new Date().toISOString(),row.id);return{saved:true};
     });
     case 'editSentenceSuggestion':return store.write(()=>{
-      const row=runtime.writing.row(projectId,data.jobId),output=JSON.parse(row.output||'null');
+      const row=runtime.writing.row(projectId,data.jobId),input=JSON.parse(row.input),output=JSON.parse(row.output||'null');
       if(!output?.proposal||output.review!=='pending'||row.status!=='succeeded')throw new StoreError('REVISION_NOT_READY','只有尚未采用的有效建议可以编辑。',409);
-      if(store.object(projectId,output.objectId).revision!==output.expectedRevision||data.expectedReplacement!==output.proposal.replacement)throw new StoreError('VERSION_CONFLICT','正文或建议已更新，编辑内容仍保留，请核对最新建议。',409);
+      const documentChanged=store.object(projectId,output.objectId).revision!==output.expectedRevision;
+      if((documentChanged&&!input.batchTarget)||data.expectedReplacement!==output.proposal.replacement)throw new StoreError('VERSION_CONFLICT','正文或建议已更新，编辑内容仍保留，请核对最新建议。',409);
+      const persist=edit=>{
+        const stamp=new Date().toISOString();
+        output.authorEdits=[...(output.authorEdits||[]),{...edit,at:stamp}].slice(-50);
+        store.db.prepare('UPDATE jobs SET output=?,updated_at=? WHERE id=?').run(JSON.stringify(output),stamp,row.id);
+        return {saved:true,job:store.publicJob({...row,output:JSON.stringify(output),updated_at:stamp})};
+      };
+      if(output.originalParagraphs){
+        const {paragraphIndex:index,text}=data,paragraphs=output.proposal.paragraphs.slice();
+        if(!Number.isInteger(index)||index<0||index>=paragraphs.length||typeof text!=='string'||!text.trim()||text!==text.trim()||text.length>4000||/[\r\n\x00]/.test(text))throw new StoreError('INVALID_INPUT','请输入单个非空自然段，最多 4000 字，首尾请去掉空白。');
+        const before=paragraphs[index];
+        paragraphs[index]=text;
+        output.proposal=validateProposal(JSON.stringify({...output.proposal,paragraphs}),output.original,output.evidence||{sources:[]},output.originalParagraphs);
+        return persist({paragraphIndex:index,before,after:text});
+      }
       if(!Number.isInteger(data.index)||typeof data.text!=='string'||data.text.length>8000||/[\r\n\x00]/.test(data.text))throw new StoreError('INVALID_INPUT','本句应为不超过8000字的单段文字。');
       const rows=compareSentences(output.original,output.proposal.replacement,output.proposal.sentenceChanges),item=rows[data.index];
       if(!item||item.before!==data.before||item.after!==data.after)throw new StoreError('VERSION_CONFLICT','句子已更新，请核对后重试。',409);
@@ -87,9 +104,9 @@ export async function revisionAction(runtime,action,data){
       rows[data.index]={before:item.before,after:data.text,kind,source:'estimate',reason:'作者编辑后的建议，修改分级待核对'};
       const replacement=rows.map(item=>item.after).join('');if(!replacement.trim()||replacement.length>8000)throw new StoreError('INVALID_INPUT','完整建议不能为空或超过8000字。');
       if(replacement!==replacement.trim())throw new StoreError('INVALID_INPUT','完整建议的首尾不能包含空白，请调整后保存。');
-      output.authorEdits=[...(output.authorEdits||[]),{index:data.index,before:item.after,after:data.text,at:new Date().toISOString()}].slice(-50);
+      if((input.batchTarget||input.reviewFinding)&&JSON.stringify(citationMarkers(output.original).sort())!==JSON.stringify(citationMarkers(replacement).sort()))throw new StoreError('CITATION_CHANGED','请保留原有引用标记。需要补充或核对的文献可另行处理。',409);
       output.proposal={...output.proposal,replacement,sentenceChanges:rows.filter(row=>row.before||row.after)};
-      store.db.prepare('UPDATE jobs SET output=?,updated_at=? WHERE id=?').run(JSON.stringify(output),new Date().toISOString(),row.id);return{saved:true};
+      return persist({index:data.index,before:item.after,after:data.text});
     });
   }
 }

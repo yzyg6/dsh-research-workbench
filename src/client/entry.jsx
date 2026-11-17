@@ -3,13 +3,13 @@ import { App } from './App.jsx';
 import { createApi } from './api.mjs';
 import { HostAdapter } from './host-adapter.mjs';
 import { Icon } from './icons.jsx';
-import { TASK_LABELS } from '../shared/model.mjs';
+import { objectForTask, TASK_LABELS } from '../shared/model.mjs';
+import { readDocumentPosition } from './document-position.mjs';
 import { acceptanceMarker, storedMarker } from './native-evidence.mjs';
 import { seedNativeDraft } from './native-fixture.mjs';
 import { NativeSentenceAdapter } from './native-sentence-adapter.mjs';
-import { DEFAULT_PROMPT } from './SentenceEditor.jsx';
 import {PROMPT_TEMPLATES} from '../shared/revision-review.mjs';
-import {PromptPicker} from './RevisionTools.jsx';
+import { PromptTemplateModule } from './WordRevisionModules.jsx';
 
 const NS = 'dsh-research-workbench';
 const api = createApi();
@@ -80,17 +80,17 @@ export function NativeSentenceBody(props) {
   const [template,setTemplate]=React.useState('scientific');
   const templatePrompt=PROMPT_TEMPLATES.find(item=>item.id===template).prompt;
   const member = Boolean(workspaces?.items?.some(workspace => workspace.sessionIds.includes(props.sessionId)));
-  const defaultRequest=(prompt=templatePrompt)=>props.conversationKind==='formatting'?'请检查当前 Word 的格式，并按我的要求生成可预览的格式方案。先不要应用。':props.autoSelectionDraft&&props.selectedText?`请修改当前选句：\n“${props.selectedText}”\n\n修改要求：${prompt}`:props.conversationOnly?'请结合整篇稿件及实际文献，讨论论证结构、术语一致性与证据支持，先给出修改建议，不直接改写文件。':prompt;
+  const defaultRequest=(prompt=templatePrompt)=>props.conversationKind==='chapter'&&!props.conversationOnly?'请优化已选小节。先检查前后文和论证顺序，再整体调整段落组织、衔接与措辞。保留段落数量、数据、引文和结论强度，说明结构调整。'+prompt:props.conversationKind==='formatting'?'请检查当前 Word 的格式，并按我的要求生成可预览的格式方案。先不要应用。':props.autoSelectionDraft&&props.selectedText?`请修改当前选句：\n“${props.selectedText}”\n\n修改要求：${prompt}`:props.conversationOnly?'请结合整篇稿件及实际文献，讨论论证结构、术语一致性与证据支持，先给出修改建议，不直接改写文件。':prompt;
   const chooseTemplate=id=>{setTemplate(id);if(member&&input?.phase==='plain'&&!props.selectionPending&&(!input.draft?.trim()||input.draft===automaticDraft.current?.text)){const text=defaultRequest(PROMPT_TEMPLATES.find(item=>item.id===id).prompt);props.inputActions.setDraft(text);props.inputActions.persistDraft();automaticDraft.current={jobId:props.jobId,text};setNotice('模板已立即更新到输入框，可编辑后发送。')}else setNotice('模板已选择；已有输入已保留，可点击填入模板。')};
   const conversationContent=React.useMemo(()=>props.renderFactorySlot('conversation.content',{variant:'embedded',phase:'active',hero:false}),[props.renderFactorySlot]);
-  const fillDefault = () => { if (!member || input?.phase !== 'plain'||props.selectionPending) return; if (input?.draft?.trim()&&input.draft!==automaticDraft.current?.text) { setNotice('原生输入框已有文字，已保留。可直接编辑后发送。'); return; } const text=defaultRequest();props.inputActions.setDraft(text); props.inputActions.persistDraft();automaticDraft.current={jobId:props.jobId,text}; setNotice('默认要求已填入原生输入框，确认模型后发送。'); };
+  const fillDefault = () => { if (!member || input?.phase !== 'plain'||props.selectionPending) return; if (input?.draft?.trim()&&input.draft!==automaticDraft.current?.text) { setNotice('原生输入框已有文字，已保留。可直接编辑后发送。'); return; } const text=props.reviewInstruction||defaultRequest();props.inputActions.setDraft(text); props.inputActions.persistDraft();automaticDraft.current={jobId:props.jobId,text}; setNotice(props.reviewInstruction?'已填入审阅提示词。发送后可在「对照」中决定是否采用。':'默认要求已填入原生输入框，确认模型后发送。'); };
   React.useEffect(()=>{
     if(props.conversationOnly){preparedSelection.current=null;return}
-    if(!props.autoSelectionDraft||props.conversationOnly||!props.selectedText||props.selectionPending||!member||input?.phase!=='plain'||preparedSelection.current===props.jobId)return;
+    if((!props.autoSelectionDraft&&!props.reviewInstruction)||props.conversationOnly||!props.selectedText||props.selectionPending||!member||input?.phase!=='plain'||preparedSelection.current===props.jobId)return;
     preparedSelection.current=props.jobId;
     if(input.draft?.trim()&&input.draft!==automaticDraft.current?.text){setNotice('已切换当前选句；输入框已有内容已保留，请核对修改要求后发送。');return}
-    const text=defaultRequest();automaticDraft.current={jobId:props.jobId,text};props.inputActions.setDraft(text);props.inputActions.persistDraft();setNotice('当前选句的默认要求已填入；可直接编辑，确认模型后发送。');
-  },[props.autoSelectionDraft,props.conversationOnly,props.selectedText,props.selectionPending,props.jobId,member,input?.phase,input?.draft,props.inputActions]);
+    const text=props.reviewInstruction||defaultRequest();automaticDraft.current={jobId:props.jobId,text};props.inputActions.setDraft(text);props.inputActions.persistDraft();setNotice(props.reviewInstruction?'已填入审阅提示词。发送后可在「对照」中决定是否采用。':'当前选句的默认要求已填入；可直接编辑，确认模型后发送。');
+  },[props.autoSelectionDraft,props.reviewInstruction,props.conversationOnly,props.selectedText,props.selectionPending,props.jobId,member,input?.phase,input?.draft,props.inputActions]);
   React.useEffect(() => {
     const keys = event => {
       if (!event.ctrlKey || !event.altKey) return;
@@ -99,11 +99,20 @@ export function NativeSentenceBody(props) {
       if (event.key === 'Enter' && member && input?.phase === 'plain'&&!props.selectionPending) { event.preventDefault(); event.stopPropagation(); if (input?.draft?.trim()) props.inputActions.submit(); else setNotice('请先在原生输入框填写修改要求。'); }
     };
     window.addEventListener('keydown', keys, true); return () => window.removeEventListener('keydown', keys, true);
-  }, [member, input?.phase, input?.draft, props.inputActions,props.selectionPending,props.selectedText,props.autoSelectionDraft,template]);
+  }, [member, input?.phase, input?.draft, props.inputActions,props.selectionPending,props.selectedText,props.autoSelectionDraft,props.reviewInstruction,template]);
   React.useEffect(() => { sentenceHost.mounted(props.jobId, true); return () => sentenceHost.mounted(props.jobId, false); }, [props.jobId, props.sessionId]);
   React.useEffect(() => { const record = sentenceHost.records.get(props.jobId); if (record) { record.nativeEvidence = { slotSessionId: props.sessionId, workspaceMember: member, inputPhase: input?.phase || null }; sentenceHost.notify(); } }, [props.jobId, props.sessionId, member, input?.phase]);
   React.useEffect(()=>{if(!notice)return;const timer=setTimeout(()=>setNotice(''),4000);return()=>clearTimeout(timer)},[notice]);
-  return <div ref={body} className="rw-native-sentence-body">{(!member||!props.conversationOnly)&&<div className="rw-native-sentence-tools">{!member&&<span>正在加入论文工作区…</span>}{!props.conversationOnly&&<PromptPicker value={template} disabled={!member||input?.phase!=='plain'||props.selectionPending} onChange={chooseTemplate}/>}{!props.conversationOnly&&<button className="rw-secondary" title="填入默认要求（Ctrl+Alt+P），Ctrl+Alt+Enter 发送" disabled={!member||input?.phase!=='plain'||props.selectionPending} onClick={fillDefault}>填入模板</button>}</div>}{!props.conversationOnly&&<details className="rw-template-preview"><summary>查看模板内容</summary><p>{templatePrompt}</p></details>}{notice&&<p className="rw-native-sentence-notice" role="status">{notice}</p>}{conversationContent}</div>;
+  return <div ref={body} className="rw-native-sentence-body">
+    {props.conversationOnly
+      ? (!member||notice)&&<p className="rw-native-sentence-notice" role="status">{member?notice:'正在加入论文工作区…'}</p>
+      : <PromptTemplateModule title={props.reviewInstruction?'审阅提示词':'修改模板'} icon={props.reviewInstruction?'chat':'write'}
+          value={template} onChange={props.reviewInstruction?null:chooseTemplate} onFill={fillDefault}
+          disabled={!member||input?.phase!=='plain'||props.selectionPending} prompt={props.reviewInstruction||templatePrompt}
+          fillLabel={props.reviewInstruction?'填入审阅提示词':'填入模板'}
+          fillTitle="填入修改要求（Ctrl+Alt+P），Ctrl+Alt+Enter 发送" connecting={!member} notice={notice}/>}
+    {conversationContent}
+  </div>;
 }
 function NativeSentenceConversation({ info, SessionProvider, renderSlot }) {
   React.useSyncExternalStore(sentenceHost.subscribe, sentenceHost.getSnapshot);
@@ -117,7 +126,7 @@ function NativeSentenceConversation({ info, SessionProvider, renderSlot }) {
   const shown=record?.status==='ready'?record:record?.status!=='failed'&&readyService.current===sentenceHost.sessions&&previous?.projectId===info.project.id&&previous?.objectId===info.job?.objectId&&previous?.sessionId===info.job?.nativeSessionId?previous:null;
   if (connectionError||!SessionProvider || !sentenceHost.sessions || !shown) return <div className="rw-native-failure" role="status">{connectionError||record?.error || '正在连接 DSH 原生选句会话…'}{(connectionError||record?.status === 'failed') && <button className="rw-secondary" onClick={() => setAttempt(n => n + 1)}>重新连接</button>}</div>;
   const discussion=info.job.conversationOnly||['adopted','undone'].includes(info.job.output?.review);
-  return <div className="rw-native-sentence-frame" data-native-sentence-session-id={shown.sessionId}><NativeBoundary key={shown.sessionId}><SessionProvider session={shown.ref}>{renderSlot(NS + '.sentence-session', { jobId: info.job.id,conversationKind:info.job.conversationKind, conversationOnly: discussion,selectedText:discussion?'':info.job.original||info.job.output?.original,selectionPending:info.selectionPending||record?.status!=='ready',autoSelectionDraft:info.autoSelectionDraft }, { only: 'native' })}</SessionProvider></NativeBoundary></div>;
+  return <div className="rw-native-sentence-frame" data-native-sentence-session-id={shown.sessionId}><NativeBoundary key={shown.sessionId}><SessionProvider session={shown.ref}>{renderSlot(NS + '.sentence-session', { jobId: info.job.id,conversationKind:info.job.conversationKind, conversationOnly: discussion,selectedText:discussion?'':info.job.original||info.job.output?.original,selectionPending:info.selectionPending||record?.status!=='ready',autoSelectionDraft:info.autoSelectionDraft,reviewInstruction:discussion?null:info.reviewInstruction||info.job.reviewInstruction }, { only: 'native' })}</SessionProvider></NativeBoundary></div>;
 }
 function OpenButton() { return <button type="button" title="打开科研工作台" aria-label="科研工作台" onClick={() => context.layout.selectPanel(NS)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 9px', border: 0, borderRadius: 6, color: 'inherit', background: 'transparent', cursor: 'pointer', fontSize: 12 }}><Icon name="brand" size={16} />科研工作台</button>; }
 function WorkbenchRailIcon(){return <Icon name="brand" size={18}/>}
@@ -133,6 +142,33 @@ export function apply(ctx) {
   ctx.effect(() => () => host.dispose(), NS + ': session ownership');
   ctx.effect(() => () => sentenceHost.dispose(), NS + ': sentence session ownership');
   ctx.effect(() => {
+    const controller = new AbortController();
+    let timer;
+    let active = ctx.layout.panelInfo.getSnapshot().activePanelId === NS;
+    const prepare = () => {
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        if (active || controller.signal.aborted) return;
+        const state = await api.preload(controller.signal);
+        if (!state || controller.signal.aborted) return;
+        const project = state.projects.find(item => item.id === state.activeProjectId);
+        if (project?.activeTask !== 'writing') return;
+        const object = objectForTask(project, 'writing');
+        if (object?.encoding === 'binary' && /\.docx$/i.test(object.metadata?.workspaceFile || object.title) &&
+            readDocumentPosition(project, object, 'word-mode') !== 'read') {
+          await api.wordcraftAssets(controller.signal).catch(() => {});
+        }
+      }, 250);
+    };
+    if (!active) prepare();
+    const unsubscribe = ctx.layout.panelInfo.subscribe(() => {
+      const selected = ctx.layout.panelInfo.getSnapshot().activePanelId === NS;
+      if (active && !selected) prepare();
+      active = selected;
+    });
+    return () => { clearTimeout(timer); controller.abort(); unsubscribe(); };
+  }, NS + ': preload');
+  ctx.effect(() => {
     let timer;
     const publish = () => {
       clearTimeout(timer);
@@ -144,7 +180,7 @@ export function apply(ctx) {
           const next = model?.next || model?.lastUsed;
           return { projectId: record.projectId, task: record.task, jobId: record.jobId, sessionId: record.sessionId, status: record.status, errorCode: record.errorCode || null, mounted: Boolean(record.mounted), nativeEvidence: { ...record.nativeEvidence, storedDraftMarker: storedMarker(localStorage, record.sessionId) }, nextModel: next ? { provider: next.provider, model: next.model, reasoningEffort: next.reasoningEffort } : null };
         });
-        void api.hostStatus({ version: '0.7.1', uiVersion:'0.11.0', origin: location.origin, userAgent: navigator.userAgent, sessions }).catch(() => {});
+        void api.hostStatus({ version: '0.7.1', uiVersion:'0.12.9-review-inline', origin: location.origin, userAgent: navigator.userAgent, sessions }).catch(() => {});
       }, 120);
     };
     const off = host.subscribe(publish), offSentence = sentenceHost.subscribe(publish); publish();
