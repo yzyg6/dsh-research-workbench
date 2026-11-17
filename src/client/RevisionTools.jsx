@@ -2,8 +2,37 @@ import React from 'react';
 import { CHANGE_LABELS, compareSentences, PROMPT_TEMPLATES } from '../shared/revision-review.mjs';
 import {wordDifferences} from './word-diff.mjs';
 
-export function PromptPicker({value,onChange,disabled}){
-  return <label className="rw-prompt-picker">修改模板<select aria-label="修改提示词模板" disabled={disabled} value={value} onChange={event=>onChange(event.target.value)}>{PROMPT_TEMPLATES.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select></label>;
+export function PromptPicker({value,onChange,disabled,showLabel=true,templates=PROMPT_TEMPLATES,label='修改提示词模板'}){
+  return <label className="rw-prompt-picker">{showLabel&&'修改模板'}<select aria-label={label} disabled={disabled} value={value} onChange={event=>onChange(event.target.value)}>{templates.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select></label>;
+}
+
+export function ChapterComparison({original, revised, editable, busy, onEdit, onEditingChange}) {
+  const [editing,setEditing]=React.useState(null);
+  const [saving,setSaving]=React.useState(false);
+  const [error,setError]=React.useState('');
+  const callback=React.useRef(onEditingChange);callback.current=onEditingChange;
+  React.useEffect(()=>{callback.current?.(Boolean(editing));return()=>callback.current?.(false)},[Boolean(editing)]);
+  const save=async()=>{
+    if(!editing||saving)return;
+    setSaving(true);setError('');
+    try{await onEdit({paragraphIndex:editing.index,expectedReplacement:editing.expectedReplacement,text:editing.text});setEditing(null)}
+    catch(error){setError(error.message)}
+    finally{setSaving(false)}
+  };
+  return <div className="rw-chapter-comparison" aria-label="整节改写对照">
+    <h3>原文</h3><h3>优化后</h3>
+    {original.map((text,index)=><React.Fragment key={index}>
+      <p>{text}</p>
+      <section>
+        {editing?.index===index?<><textarea aria-label={`第 ${index+1} 段改后文字`} autoFocus rows={5} maxLength={4000} value={editing.text} disabled={saving||busy}
+          onChange={event=>setEditing({...editing,text:event.target.value})}
+          onKeyDown={event=>{if(event.key==='Escape'&&!saving){event.stopPropagation();setEditing(null)}if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();void save()}}}/>
+          <div className="rw-suggestion-edit-actions"><button className="rw-secondary" disabled={busy||saving||!editable} onClick={()=>void save()}>保存本段</button><button className="rw-quiet" disabled={saving} onClick={()=>setEditing(null)}>取消编辑</button></div>
+          {error&&<span className="rw-sentence-warning" role="alert">{error}</span>}</>:<><p data-changed={text!==revised[index]}>{revised[index]}</p>
+          {editable&&onEdit&&<button className="rw-suggestion-edit-button" aria-label={`编辑第 ${index+1} 段建议`} disabled={busy||Boolean(editing)} onClick={()=>{setError('');setEditing({index,text:revised[index],expectedReplacement:revised.join('\n\n')})}}>编辑本段</button>}</>}
+      </section>
+    </React.Fragment>)}
+  </div>;
 }
 export function SentenceComparison({before,after,changes,onClassify,onEdit,onEditingChange,editable=false,busy,compact=false}){
   const [error,setError]=React.useState(''),[saving,setSaving]=React.useState(false),[showUnchanged,setShowUnchanged]=React.useState(!compact);
@@ -16,7 +45,7 @@ export function SentenceComparison({before,after,changes,onClassify,onEdit,onEdi
   const rows=React.useMemo(()=>compareSentences(before,after,changes).map(row=>({...row,words:wordDifferences(row.before,row.after)})),[before,after,changes]);
   const highlight=parts=>parts.map((part,index)=>part.changed?<mark className="rw-word-change" key={index}>{part.text}</mark>:part.text);
   return <div className="rw-colored-comparison"><div className="rw-change-legend" aria-label="修改程度图例">{Object.entries(CHANGE_LABELS).map(([kind,label])=><span key={kind} data-kind={kind}>{label}</span>)}</div>
-    <p className="rw-review-help">自动分类供复核，可手动更正。{editable&&onEdit?'点击“编辑本句”可调整改后文字，保存后再采用。':''}</p>{editing&&editing.expectedReplacement!==after&&<p role="status">建议已有更新，你正在编辑的文字已保留，请先核对。</p>}{error&&<p role="alert">{error}</p>}{notice&&<p className="rw-review-help" role="status">{notice}</p>}
+    <p className="rw-review-help">{onClassify?'自动分类供复核，可手动更正。':'自动分类供复核。'}{editable&&onEdit?'点击“编辑本句”可调整改后文字，保存后再采用。':''}</p>{editing&&editing.expectedReplacement!==after&&<p role="status">建议已有更新，你正在编辑的文字已保留，请先核对。</p>}{error&&<p role="alert">{error}</p>}{notice&&<p className="rw-review-help" role="status">{notice}</p>}
     {compact&&<label className="rw-change-filter"><input type="checkbox" checked={showUnchanged} onChange={event=>setShowUnchanged(event.target.checked)}/>显示未修改句子（{rows.filter(row=>row.kind==='unchanged').length}）</label>}<div className="rw-change-head"><b>修改前</b><b>修改后</b></div>
     {(editing?.rows||rows).map((row,index)=>(showUnchanged||row.kind!=='unchanged')&&<div className="rw-change-row" key={index} data-kind={row.kind}>
       <div className="rw-change-meta"><span>{CHANGE_LABELS[row.kind]} · {row.source==='exact'?'文字一致':row.source==='author'?'作者确认':row.source==='model'?'模型判断':'初判待核对'}</span>{onClassify&&row.before!==row.after&&<select aria-label={`第 ${index+1} 句修改分类`} value={row.kind} disabled={busy||saving||Boolean(editing)} onChange={event=>void classify({index,before:row.before,after:row.after,kind:event.target.value})}>{Object.entries(CHANGE_LABELS).filter(([kind])=>kind!=='unchanged').map(([kind,label])=><option key={kind} value={kind}>{label}</option>)}</select>}</div>

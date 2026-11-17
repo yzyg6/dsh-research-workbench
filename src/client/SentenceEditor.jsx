@@ -3,12 +3,12 @@ import { Editor } from '@tiptap/core';
 import { writingExtensions, sentenceAnchor } from '../shared/writing-document.mjs';
 import { Icon } from './icons.jsx';
 import katexStyles from './katex.generated.css';
-import { SentenceComparison, PromptPicker } from './RevisionTools.jsx';
+import { ChapterComparison, SentenceComparison, PromptPicker } from './RevisionTools.jsx';
 import { DEFAULT_REVISION_PROMPT, PROMPT_TEMPLATES } from '../shared/revision-review.mjs';
 
 export const DEFAULT_PROMPT = DEFAULT_REVISION_PROMPT;
 
-export function RevisionPanel({ anchor, job, busy, error, onGenerate, onAction, onClassify, onEditSuggestion, onEditingChange, onClose, onImport, modelReady, currentRevision, workingCopy=false, embedded = false }) {
+export function RevisionPanel({ anchor, job, busy, error, onGenerate, onAction, onClassify, onEditSuggestion, onEditingChange, onClose, onImport, modelReady, currentRevision, workingCopy=false, embedded = false, batchReview = false }) {
   const [instruction, setInstruction] = React.useState(DEFAULT_PROMPT);
   const [template,setTemplate]=React.useState('scientific');
   const [keywords, setKeywords] = React.useState('');
@@ -21,17 +21,22 @@ export function RevisionPanel({ anchor, job, busy, error, onGenerate, onAction, 
   const [viewport, setViewport] = React.useState(() => ({ width: globalThis.window?.innerWidth || 1200, height: globalThis.window?.innerHeight || 800 }));
   React.useEffect(() => { const resize = () => setViewport({ width: window.innerWidth, height: window.innerHeight }); window.addEventListener('resize', resize); return () => window.removeEventListener('resize', resize); }, []);
   const output = job?.output, proposal = output?.proposal;
+  const chapter = Array.isArray(output?.originalParagraphs) && Array.isArray(proposal?.paragraphs);
   React.useLayoutEffect(() => { if (proposal && bodyRef.current) bodyRef.current.scrollTop = 0; }, [job?.id]);
   const running = ['queued', 'running'].includes(job?.status), pending = output?.review === 'pending';
-  const outdated=job?.status==='outdated'||(pending&&Number.isInteger(currentRevision)&&output.expectedRevision!==currentRevision);
+  const outdated=job?.status==='outdated'||(!batchReview&&pending&&Number.isInteger(currentRevision)&&output.expectedRevision!==currentRevision);
   const undoOutdated=output?.review==='adopted'&&Number.isInteger(currentRevision)&&output.appliedRevision!==currentRevision;
+  const editable=pending&&!outdated&&job.status==='succeeded';
+  const edit=onEditSuggestion?data=>onEditSuggestion(job.id,data):undefined;
+  const editingChanged=value=>{setEditingSuggestion(value);onEditingChange?.(value)};
   const original = output?.original || anchor?.selectedText || '';
   const position = anchor?.position || { left: Math.max(16, viewport.width / 2 - 220), top: 100 };
   const top = Math.max(16, Math.min(position.top, viewport.height - (proposal ? 620 : 370)));
   return <aside className={`rw-sentence-panel${embedded ? ' rw-sentence-embedded' : ''}`} role={embedded ? 'region' : 'dialog'} aria-label={embedded ? '改写对照与文献依据' : '选句修改'} style={embedded ? { position: 'static', width: '100%', height: '100%', maxHeight: 'none', border: 0, borderRadius: 0, boxShadow: 'none' } : { left: Math.max(12, Math.min(position.left, viewport.width - 456)), top, maxHeight: viewport.height - top - 16 }} onMouseDown={event => event.stopPropagation()}>
-    <header><span className="rw-sentence-mark"><Icon name="write" size={17} /></span><div><strong>{embedded ? '改写对照' : '选句修改'}</strong><small>结合全文 · 检索文献 · 对照采用</small></div>{!embedded && <button className="rw-icon-button" aria-label="关闭选句修改" onClick={onClose}><Icon name="close" size={15} /></button>}</header>
+    <header><span className="rw-sentence-mark"><Icon name="write" size={17} /></span><div><strong>{chapter ? '章节优化对照' : embedded ? '改写对照' : '选句修改'}</strong><small>{batchReview ? '采用时核对当前 Word 原文' : '结合全文 · 检索文献 · 对照采用'}</small></div>{!embedded && <button className="rw-icon-button" aria-label="关闭选句修改" onClick={onClose}><Icon name="close" size={15} /></button>}</header>
     <div ref={bodyRef} className="rw-sentence-body">
-      {proposal ? <SentenceComparison key={job.id} before={original} after={proposal.replacement} changes={proposal.sentenceChanges} busy={busy} editable={pending&&!outdated&&job.status==='succeeded'} onEditingChange={value=>{setEditingSuggestion(value);onEditingChange?.(value)}} onEdit={onEditSuggestion?data=>onEditSuggestion(job.id,data):undefined} onClassify={onClassify ? data=>onClassify(job.id,data) : undefined}/> : <><div className="rw-sentence-label">已选正文</div><blockquote className="rw-sentence-original">{original}</blockquote></>}
+      {chapter ? <ChapterComparison key={job.id} original={output.originalParagraphs} revised={proposal.paragraphs} busy={busy} editable={editable} onEdit={edit} onEditingChange={editingChanged}/>
+        : proposal ? <SentenceComparison key={job.id} before={original} after={proposal.replacement} changes={proposal.sentenceChanges} busy={busy} editable={editable} onEditingChange={editingChanged} onEdit={edit} onClassify={onClassify ? data=>onClassify(job.id,data) : undefined}/> : <><div className="rw-sentence-label">已选正文</div><blockquote className="rw-sentence-original">{original}</blockquote></>}
       {anchor && (!proposal || refining) && !output?.review?.match(/adopted|undone/) && <><PromptPicker value={template} disabled={running||busy} onChange={id=>{setTemplate(id);setInstruction(PROMPT_TEMPLATES.find(item=>item.id===id).prompt)}}/><label className="rw-sentence-label" htmlFor="rw-sentence-request">你的修改要求</label><textarea id="rw-sentence-request" aria-label="句子修改要求" placeholder="例如：更简洁；强调研究意义；核对因果关系……" value={instruction} onChange={event => setInstruction(event.target.value)} maxLength={6000} disabled={running || busy} /><div className="rw-sentence-presets">{['更简洁', '增强逻辑衔接', '核对证据与措辞'].map(text => <button key={text} disabled={running || busy} onClick={() => setInstruction(text)}>{text}</button>)}</div>
       <button className="rw-sentence-disclosure" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}><Icon name="search" size={12} />文献检索设置<Icon name="down" size={10} /></button>
       {advanced && <div className="rw-sentence-retrieval"><label>文献关键词（可选）<input aria-label="文献关键词" value={keywords} maxLength={500} onChange={event => setKeywords(event.target.value)} placeholder="留空则从选句提取，支持中英文关键词" /></label><p>优先检索 Zotero MCP 全文与本地已解析文献。关键词命中后，再判断证据是否支持表达。</p><button className="rw-quiet" disabled={busy || running} onClick={() => fileRef.current.click()}><Icon name="upload" size={12} />添加已解析文献 Markdown</button><input hidden ref={fileRef} type="file" accept=".md,.markdown,.txt" aria-label="添加本地文献" onChange={async event => { const file = event.target.files[0]; if (!file) return; try { if (file.size > 1024 * 1024) throw new Error('文献文件上限为 1 MiB。'); await onImport({ title: file.name, text: await file.text() }); setImported(`已加入共享文献库：${file.name}`); } catch (error) { setImported(error.message); } event.target.value = ''; }} />{imported && <p role="status">{imported}</p>}</div>}
@@ -41,16 +46,16 @@ export function RevisionPanel({ anchor, job, busy, error, onGenerate, onAction, 
       {error && <p role="alert" className="rw-sentence-warning">{error}</p>}
       {job?.error && <p role="alert" className="rw-sentence-warning">{job.error}</p>}
       {proposal && <>{output.instruction && <p className="rw-sentence-reason">修改要求：{output.instruction}</p>}<p className="rw-sentence-reason">{proposal.reason}</p>
-      <div className="rw-sentence-context"><Icon name="file" size={12} /><span>整篇稿件已带入 · {workingCopy?'修订 r':'v'}{output.expectedRevision}</span><span>{output.model?.model}</span></div>
+      <div className="rw-sentence-context"><Icon name="file" size={12} /><span>{batchReview?'结合小节上下文与相关建议':'整篇稿件已带入'} · {workingCopy?'修订 r':'v'}{output.expectedRevision}</span><span>{output.model?.model}</span></div>
       {[...(output.evidence?.warnings || []), ...proposal.warnings].map((warning, index) => <p className="rw-sentence-warning" key={index}>{warning}</p>)}
-      <details className="rw-evidence-list" open={embedded || undefined}><summary>文献依据 · {proposal.evidenceIds.length} 条用于建议 / {output.evidence.sources.length} 条命中</summary><p className="rw-context-muted">检索词：{output.evidence.terms.join('、') || '无'} · Zotero {output.evidence.zotero === 'searched' ? '已检索' : '不可用'}</p>{output.evidence.sources.map(source => <article key={source.id} className="rw-evidence-card"><div><b>{source.id}</b><span>{proposal.evidenceIds.includes(source.id) ? '用于本次建议' : '检索命中 · 未采用'}</span></div><strong>{source.title}</strong><small>{source.kind} · {source.locator}{source.synthetic ? ' · 合成测试资料' : ''}</small><blockquote>{source.snippet}</blockquote>{source.url && <a href={source.url}>在 Zotero 中定位文献 ↗</a>}</article>)}</details>
+      {!batchReview && output.evidence?.terms && <details className="rw-evidence-list" open={embedded || undefined}><summary>文献依据 · {proposal.evidenceIds.length} 条用于建议 / {output.evidence.sources.length} 条命中</summary><p className="rw-context-muted">检索词：{output.evidence.terms.join('、') || '无'} · Zotero {output.evidence.zotero === 'searched' ? '已检索' : '不可用'}</p>{output.evidence.sources.map(source => <article key={source.id} className="rw-evidence-card"><div><b>{source.id}</b><span>{proposal.evidenceIds.includes(source.id) ? '用于本次建议' : '检索命中 · 未采用'}</span></div><strong>{source.title}</strong><small>{source.kind} · {source.locator}{source.synthetic ? ' · 合成测试资料' : ''}</small><blockquote>{source.snippet}</blockquote>{source.url && <a href={source.url}>在 Zotero 中定位文献 ↗</a>}</article>)}</details>}
       {outdated && <p className="rw-sentence-warning">{workingCopy?'正文已有后续修改，请在当前正文重新选句。':'正文已有新版本，原文保持不变。请在最新正文重新选句。'}</p>}
       {undoOutdated && <p className="rw-sentence-warning">采用后正文已有更新，不能直接撤回。请先查看版本记录，保留后续修改。</p>}
       {anchor && pending && !refining && <button className="rw-secondary" onClick={() => setRefining(true)}>继续提要求</button>}
 </>}
       {running && <button className="rw-quiet" onClick={() => onAction('cancelJob', job.id)}>取消本次生成</button>}
     </div>
-    {proposal && <div className="rw-sentence-review">{pending && <button className="rw-primary" disabled={busy || editingSuggestion || outdated || job.status !== 'succeeded'} onClick={() => onAction('applySentence', job.id)}><Icon name="check" size={14} />采用修改{job.native ? '（Ctrl+Alt+A）' : ''}</button>}{output.review === 'adopted' && <><span><Icon name="check" size={13} />{workingCopy?'已保存到工作副本':`已保存 v${output.appliedRevision}`}</span><button className="rw-secondary" disabled={busy||undoOutdated} onClick={() => onAction('undoSentence', job.id)}>撤回本次采用{job.native ? '（Ctrl+Alt+Z）' : ''}</button></>}{output.review === 'undone' && <span>已撤回 · 修改历史保留</span>}{pending && <button className="rw-quiet" onClick={onClose}>保留原文</button>}</div>}
+    {proposal && <div className="rw-sentence-review">{pending && <button className="rw-primary" disabled={busy || editingSuggestion || outdated || job.status !== 'succeeded'} onClick={() => onAction('applySentence', job.id)}><Icon name="check" size={14} />{batchReview ? '采用这条修改' : '采用修改'}{job.native ? '（Ctrl+Alt+A）' : ''}</button>}{output.review === 'adopted' && <><span><Icon name="check" size={13} />{workingCopy?'已保存到工作副本':`已保存 v${output.appliedRevision}`}</span><button className="rw-secondary" disabled={busy||undoOutdated} onClick={() => onAction('undoSentence', job.id)}>撤回本次采用{job.native ? '（Ctrl+Alt+Z）' : ''}</button></>}{output.review === 'undone' && <span>已撤回 · 修改历史保留</span>}{output.review === 'skipped' && <span>已跳过 · 保留原文</span>}{pending && <button className="rw-quiet" disabled={batchReview && (busy||editingSuggestion)} onClick={onClose}>{batchReview ? '跳过，保留原文' : '保留原文'}</button>}</div>}
     <footer>{workingCopy?'采用后更新同一 Word 工作副本 · 支持撤回':'只有采用后才替换原句 · 每次修改保留版本'}</footer>
   </aside>;
 }

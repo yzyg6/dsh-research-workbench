@@ -30,19 +30,28 @@ export class WordLiveEditor {
 }
 
 /** Only small request envelopes are polled. An assigned mutation is run once. */
-export function connectWordLive({api,owner,editor,lock,onError,onSaved}){
-  let closed=false,timer,receipt=null;
+export function connectWordLive({api,owner,editor,lock,onError,onSaved,onConnectionError,onRecovered}){
+  let closed=false,timer,receipt=null,running=false,offline=false,failures=0,retryRequested=false;
   const tick=async()=>{
+    if(closed||running)return;running=true;
     try{
       if(receipt){await api.wordControl('ack',{...owner,...receipt});receipt=null}
-      const {request}=await api.wordControl('poll',owner);if(closed||!request)return;
+      const {request}=await api.wordControl('poll',owner);if(closed)return;
+      failures=0;if(offline){offline=false;onRecovered?.()}if(!request)return;
       lock(true);
       try{receipt={id:request.id,result:await editor.run(request)};if(request.kind==='edit')onSaved?.()}
       catch(error){receipt={id:request.id,error:error.message};onError?.(error.message)}
       finally{lock(false)}
       if(!closed){await api.wordControl('ack',{...owner,...receipt});receipt=null}
-    }catch(error){if(!closed&&error.code!=='WORD_EDITOR_OWNED')onError?.(error.message)}
-    finally{if(!closed)timer=setTimeout(tick,650)}
+    }catch(error){if(!closed){
+      failures++;
+      const transport=!error.code||error.code==='SERVICE_UNAVAILABLE'||['TimeoutError','AbortError'].includes(error.name);
+      if(transport||error.code==='WORD_EDITOR_OWNED'){offline=true;(onConnectionError||onError)?.(error.code==='WORD_EDITOR_OWNED'?'此文稿已在另一个编辑窗口连接，请关闭重复窗口后重试。':'Word 服务暂时中断，正在自动重新连接。')}
+      else onError?.(error.message);
+    }}
+    finally{running=false;if(!closed){const delay=retryRequested?0:Math.min(5000,650*2**Math.min(Math.max(0,failures-1),3));retryRequested=false;timer=setTimeout(tick,delay)}}
   };
-  void tick();return()=>{closed=true;clearTimeout(timer);void api.wordControl('poll',{...owner,release:true}).catch(()=>{})};
+  const disconnect=()=>{closed=true;clearTimeout(timer);void api.wordControl('poll',{...owner,release:true}).catch(()=>{})};
+  disconnect.retry=()=>{if(closed)return;clearTimeout(timer);failures=0;if(running)retryRequested=true;else void tick()};
+  void tick();return disconnect;
 }

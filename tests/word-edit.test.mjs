@@ -6,6 +6,39 @@ const sid='session-00000000-1111-2222-3333-444444444444';
 async function setup(){const base=await mkdtemp(join(out,'case-')),workspace=join(base,'workspace');await mkdir(join(workspace,'paper'),{recursive:true});const file=join(workspace,'paper','synthetic.docx');await exec('python',['-I',join(root,'probes/word-reader/create-fixture.py'),'--output',file,'--paragraphs','3'],{windowsHide:true});
  const r=new WorkspaceRuntime({root:join(base,'catalog'),sampleRoot:join(root,'samples/figure'),publicRoot:join(root,'public')}),p=await r.store.openWorkspace({path:workspace}),o=(await r.store.state()).projects[0].objects.find(x=>x.title==='synthetic.docx');r.nativeWriting.validateSession=async()=>{};r.writing.evidence={retrieve:async()=>({sources:[],terms:[],warnings:['显式测试替身；无外部证据。'],zotero:'test-double'})};return{r,p,o,file,base,workspace}}
 const selection={anchor:{story:'body',path:[0],off:0},focus:{story:'body',path:[0],off:6},text:'Word 测'};
+test('chapter mode reuses the document chat, optimizes multiple paragraphs atomically, and undoes byte-for-byte',async()=>{
+ const {r,p,o,file}=await setup();
+ try{
+  const original=await readFile(file);
+  const lines=(await r.wordEditing.context(p,o.id)).split('\n');
+  const wordSelection={anchor:{story:'body',path:[2],off:Buffer.byteLength(lines[2])},focus:{story:'body',path:[1],off:0},text:lines.slice(1,3).join('\n')};
+  const args={projectId:p,objectId:o.id,expectedRevision:1,wordSelection};
+  const discussion=await r.nativeWriting.open({projectId:p,objectId:o.id});
+  await r.nativeWriting.bind({projectId:p,jobId:discussion,sessionId:sid});
+  await assert.rejects(r.nativeWriting.prepare(args),{code:'WORD_INVALID'});
+  await assert.rejects(r.nativeWriting.prepare({...args,revisionMode:'chapter',wordSelection:{...wordSelection,text:'错误选区'}}),{code:'WORD_INVALID'});
+  const id=await r.nativeWriting.prepare({...args,revisionMode:'chapter'});
+  assert.equal(r.nativeWriting.findSession(sid).id,id);
+  await r.nativeWriting.userTurn(sid,[{role:'user',content:[{type:'text',text:'调整这两段论证顺序。'}]}],{provider:'test',model:'synthetic'},1);
+  const context=await r.nativeWriting.readContext(sid,'合成',new AbortController().signal);
+  assert.deepEqual(context.paragraphs,lines.slice(1,3));
+  assert.equal(context.surroundings.before.at(-1),lines[0]);
+  assert.equal(context.surroundings.after[0],lines[3]);
+  assert.equal(context.revisionMode,'chapter');
+  const proposal={selectionId:id,reason:'先呈现第二段论点，再补充第一段解释。',evidenceIds:[],warnings:[]};
+  await assert.rejects(r.nativeWriting.propose(sid,{...proposal,paragraphs:['错误段数']}),{code:'INVALID_PROPOSAL'});
+  const paragraphs=[lines[2],lines[1]];
+  await r.nativeWriting.propose(sid,{...proposal,paragraphs});
+  assert.deepEqual((await r.store.asset(p,o.id)).bytes,original);
+  const adopted=await r.mutate('applySentence',{projectId:p,jobId:id});
+  assert.deepEqual(adopted.actionResult.wordUpdate,{objectId:o.id,fromRevision:1,revision:2,reopen:true});
+  assert.deepEqual((await r.wordEditing.context(p,o.id)).split('\n'),[lines[0],...paragraphs,...lines.slice(3)]);
+  assert.deepEqual(await readFile(file),original);
+  await r.mutate('undoSentence',{projectId:p,jobId:id});
+  assert.equal(r.store.object(p,o.id).revision,3);
+  assert.deepEqual((await r.store.asset(p,o.id)).bytes,original);
+ }finally{await r.dispose()}
+});
 async function firstSelection(r,p,o){const {path}=await r.wordEditing.source(p,o.id),result=await r.wordEditing.inspect({path});const first=result.text.split('\n')[0];return{anchor:{story:'body',path:[0],off:0},focus:{story:'body',path:[0],off:Buffer.byteLength(first,'utf8')},text:first}}
 async function proposal(r,p,o){const s=await firstSelection(r,p,o),id=await r.nativeWriting.prepare({projectId:p,objectId:o.id,expectedRevision:o.revision,wordSelection:s});await r.nativeWriting.bind({projectId:p,jobId:id,sessionId:sid});await r.nativeWriting.userTurn(sid,[{role:'user',content:[{type:'text',text:'更清楚地表述。'}]}],{provider:'test-double',model:'chosen-model'},1);await r.nativeWriting.readContext(sid,'',new AbortController().signal);await r.nativeWriting.propose(sid,{selectionId:id,replacement:'改写后的合成稿件标题',reason:'仅验证选句替换。',evidenceIds:[],warnings:['这是合成验证。']});return id}
 
@@ -50,6 +83,10 @@ test('DOCX patches preserve repeated sentences, UTF-8 byte offsets, namespaces, 
   const data=await r.wordEditing.inspect({path,selection:s,replacement:'保留不确定性。',output});assert(data.text.includes('公式 OOXML'));assert.equal(data.formulas,1);
   const result=await r.wordEditing.inspect({path:output});assert(result.text.startsWith(prefix+'保留不确定性。 后缀\n重复句。'));
   const raw=await exec('python',['-I','-c',"import zipfile,sys,json;a=zipfile.ZipFile(sys.argv[1]);b=zipfile.ZipFile(sys.argv[2]);xml=b.read('word/document.xml').decode();print(json.dumps({'others':all(a.read(n)==b.read(n) for n in a.namelist() if n!='word/document.xml'),'namespaces':'xmlns:cx=\"urn:unchanged\" mc:Ignorable=\"cx\"' in xml,'format':'<w:i/>' in xml,'spaces':'xml:space=\"preserve\"> 后缀</w:t>' in xml}))",path,output],{windowsHide:true});assert.deepEqual(JSON.parse(raw.stdout),{others:true,namespaces:true,format:true,spaces:true});
+  const whole=prefix+'重复句。 后缀',revised='首😀重复句。 中间 重复句。 结尾',batchOutput=join(base,'batch.docx');
+  await r.wordEditing.inspect({path,selection:{anchor:{...s.anchor,off:0},focus:{...s.focus,off:Buffer.byteLength(whole)},text:whole},replacement:revised,output:batchOutput,preserveRuns:true});
+  assert((await r.wordEditing.inspect({path:batchOutput})).text.startsWith(revised+'\n'));
+  await exec('python',['-I','-X','utf8','-c',"import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); assert '<w:rPr><w:i/></w:rPr><w:t>重复</w:t>' in z.read('word/document.xml').decode()",batchOutput],{windowsHide:true});
  }finally{await r.dispose()}
 });
 

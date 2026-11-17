@@ -3,6 +3,7 @@ import {ActionMenu} from './ActionMenu.jsx';
 import {WorkbenchSidebar} from './WorkbenchSidebar.jsx';
 import {MottoTicker} from './MottoTicker.jsx';
 import {readSidebarCollapsed,rememberSidebarCollapsed} from './workbench-preferences.mjs';
+import {readDocumentPosition,rememberDocumentPosition} from './document-position.mjs';
 import { Icon } from './icons.jsx';
 import { TASKS, TASK_LABELS, defaultLayout, normalizeLayout, objectForTask, visiblePanes } from '../shared/model.mjs';
 import styles from './workbench.css';
@@ -11,6 +12,7 @@ import compactLayout from './compact-layout.css';
 import revisionToolsStyle from './revision-tools.css';
 import refinedStyle from './refined-workbench.css';
 import glassStyle from './glass-workbench.css';
+import wordRevisionModulesStyle from './word-revision-modules.css';
 import {DocumentHistory} from './RevisionTools.jsx';
 import { SentenceEditor } from './SentenceEditor.jsx';
 import { WorkspaceBrowser } from './WorkspaceBrowser.jsx';
@@ -23,7 +25,7 @@ const date = (value) => value ? new Intl.DateTimeFormat('zh-CN', { timeZone: 'As
 const paneNames = { main: '工作区', context: '项目资料', chat: 'DSH 原生对话' };
 const RECOVERY_KEY = 'dsh-research-workbench:pending-drafts:v1';
 const layoutEvent = (kind, event) => ({ id: crypto.randomUUID(), kind, trusted: event.isTrusted === true });
-const workbenchStyles = styles + nativeTheme + compactLayout + revisionToolsStyle + refinedStyle + glassStyle;
+const workbenchStyles = styles + nativeTheme + compactLayout + revisionToolsStyle + refinedStyle + glassStyle + wordRevisionModulesStyle;
 
 function Modal({ title, onClose, children, footer }) {
   const ref = React.useRef(null);
@@ -120,9 +122,22 @@ function Content({ object, project, text, task, editMode, onEditMode, onText, on
   const editor = React.useRef(null);
   const [recovering,setRecovering]=React.useState(false),[recoveryError,setRecoveryError]=React.useState('');
   React.useEffect(()=>setRecoveryError(''),[object?.id]);
-  React.useEffect(() => { if (scroll.current) scroll.current.scrollTop = scrollTop || 0; }, [object?.id, task]);
-  React.useEffect(() => { if (editMode && editor.current) { editor.current.focus(); editor.current.setSelectionRange(cursor || 0, cursor || 0); } }, [object?.id, task, editMode]);
+  const scrollView = editMode ? 'markdown-source' : 'markdown';
+  React.useLayoutEffect(() => {
+    if (editMode && editor.current) {
+      editor.current.focus({preventScroll:true});
+      editor.current.setSelectionRange(cursor || 0, cursor || 0);
+    }
+    const element = editMode ? editor.current : scroll.current;
+    if (element) element.scrollTop = readDocumentPosition(project, object, scrollView)?.top ?? scrollTop ?? 0;
+  }, [object?.id, object?.textLoaded, task, editMode]);
+  const rememberScroll = event => {
+    const top = event.currentTarget.scrollTop;
+    rememberDocumentPosition(project, object, scrollView, {top});
+    onScroll(top);
+  };
   if (!object) return <div className="rw-empty"><Icon name={TASK_ICONS[task]} size={30} /><h2>从一份资料开始</h2><p>在左侧新建笔记或导入 Markdown，保存后的内容可以跨任务使用。</p></div>;
+  if (object.textLoaded === false) return <div className="rw-native-failure" role="status">正在打开所选资料…</div>;
   if (object.contentError) return <div className="rw-native-failure" role="alert">{recoveryError||object.contentError}<p>已有文稿和历史保留。可以重新扫描工作区，或尝试恢复缺失的 Word 工作副本。</p><div className="rw-file-recovery-actions">{object.metadata?.wordEditable&&/\.docx$/i.test(object.metadata.workspaceFile||object.title)&&<button className="rw-secondary" disabled={recovering} onClick={async()=>{setRecovering(true);setRecoveryError('');try{const next=await api.mutate('restoreWordWorkingCopy',{projectId:project.id,objectId:object.id});wordControl?.onSaved(next)}catch(e){setRecoveryError(e.message)}finally{setRecovering(false)}}}>{recovering?'正在核对并恢复…':'恢复工作副本'}</button>}<button className="rw-quiet" onClick={onBrowseWorkspace}>打开工作区文件</button></div></div>;
   if (object.encoding === 'binary' && /\.docx$/i.test(object.metadata?.workspaceFile || object.title)) { const manuscript=project.objects.find(item=>item.encoding==='utf8'&&item.kind==='manuscript'&&item.metadata?.workspaceFile?.toLowerCase()===(object.metadata?.workspaceFile||'').replace(/\.docx$/i,'.md').toLowerCase()); return task==='writing'?<WordEditor key={object.id} api={api} project={project} object={object} sentence={sentence} onHistory={onHistory} onSelectObject={onSelectObject} onBrowseWorkspace={onBrowseWorkspace} {...wordControl} initialSegment={wordSegment||0} onPosition={onWordPosition} onOpenNative={onOpenNative} onOpenMarkdown={manuscript?()=>onSelectObject(manuscript):null}/>:<WordReader key={`${object.id}:${object.revision}`} api={api} project={project} object={object} initialSegment={wordSegment||0} onPosition={onWordPosition} onOpenNative={onOpenNative} onOpenMarkdown={manuscript?()=>onSelectObject(manuscript):null}/>; }
   if (object.encoding === 'binary' && !(object.kind === 'figure' && object.metadata?.mimeType?.startsWith('image/')) && !(object.kind === 'data' && object.metadata?.preview)) return <div className="rw-file-preview"><Icon name="file" size={30} /><h2>{object.title}</h2><p>{object.metadata?.workspaceFile || '工作区原始文件'}</p><p className="rw-context-muted">保留原格式与文件版本；在原应用中打开和编辑，完成后重新扫描工作区。</p><button className="rw-primary" onClick={onOpenNative}>{object.kind === 'file' ? '在资源管理器中定位' : '使用原应用打开'}</button>{object.metadata?.mimeType === 'application/pdf' && <iframe title={object.title} src={assetUrl(project.id, object.id)} />}</div>;
@@ -131,9 +146,9 @@ function Content({ object, project, text, task, editMode, onEditMode, onText, on
     const rows = text.trim().split('\n').map((line) => line.split(','));
     return <><div className="rw-object-toolbar"><Icon name="data" /><div><h2>{object.title}</h2><p>{object.metadata?.preview ? '预览 ' : ''}{Math.max(0, rows.length - 1)} 行 · {rows[0]?.length || 0} 个字段{project.isDemo ? ' · 合成实验样例' : object.metadata?.workspaceReadOnly ? ' · 原始数据只读' : ''}</p></div><button className="rw-quiet" onClick={onHistory}><Icon name="clock" size={14} />版本</button></div><div className="rw-table-wrap"><table className="rw-table"><thead><tr>{rows[0]?.map((cell, index) => <th key={index}>{cell}</th>)}</tr></thead><tbody>{rows.slice(1, 101).map((row, index) => <tr key={index}>{row.map((cell, n) => <td key={n}>{cell}</td>)}</tr>)}</tbody></table></div></>;
   }
-  return <div ref={scroll} style={{ height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column' }} onScroll={(event) => onScroll(event.currentTarget.scrollTop)}>
+  return <div ref={scroll} style={{ height: '100%', overflow: 'auto', display: 'flex', flexDirection: 'column' }} onScroll={editMode ? undefined : rememberScroll}>
     <div className="rw-pane-toolbar"><span className="rw-document-name"><Icon name="file" size={12} />{object.title.endsWith('.md') ? object.title : `${object.title}.md`}<span>·</span>v{object.revision}</span><div style={{ display: 'flex', alignItems: 'center', gap: 5 }}><button className="rw-icon-button" aria-label="查看内容版本" onClick={onHistory}><Icon name="clock" size={13} /></button><div className="rw-mode-tabs"><button aria-pressed={!editMode} onClick={() => onEditMode(false)}>{task === 'writing' && object.kind === 'manuscript' ? '写作' : '阅读'}</button><button aria-pressed={editMode} onClick={() => onEditMode(true)}>源码</button></div></div></div>
-    {editMode ? <textarea ref={editor} className="rw-editor" aria-label="Markdown 草稿" spellCheck={false} value={text} onChange={(event) => onText(event.target.value)} onSelect={(event) => onCursor(event.currentTarget.selectionStart)} /> : <article className="rw-paper"><p className="rw-paper-eyebrow">{object.kind === 'note' ? 'Research note' : 'Manuscript draft'} · {project.isDemo ? 'Synthetic example' : 'Working paper'}</p><div className="rw-paper-meta"><span>{project.title}</span><span>{project.language === 'en' ? 'English' : '中文稿件'}</span><span>{date(object.updatedAt)}</span></div>{task === 'writing' && object.kind === 'manuscript' ? <SentenceEditor key={object.id} text={text} object={object} project={project} onText={onText} {...sentence} /> : <Markdown text={text} />}</article>}
+    {editMode ? <textarea ref={editor} className="rw-editor" aria-label="Markdown 草稿" spellCheck={false} value={text} onScroll={rememberScroll} onChange={(event) => onText(event.target.value)} onSelect={(event) => onCursor(event.currentTarget.selectionStart)} /> : <article className="rw-paper"><p className="rw-paper-eyebrow">{object.kind === 'note' ? 'Research note' : 'Manuscript draft'} · {project.isDemo ? 'Synthetic example' : 'Working paper'}</p><div className="rw-paper-meta"><span>{project.title}</span><span>{project.language === 'en' ? 'English' : '中文稿件'}</span><span>{date(object.updatedAt)}</span></div>{task === 'writing' && object.kind === 'manuscript' ? <SentenceEditor key={object.id} text={text} object={object} project={project} onText={onText} {...sentence} /> : <Markdown text={text} />}</article>}
   </div>;
 }
 
@@ -145,6 +160,8 @@ export function App({ api, nativeRender, nativeSentenceRender, onLeave = null, p
   const [error, setError] = React.useState('');
   const [notice, setNotice] = React.useState('');
   const [loading, setLoading] = React.useState(true);
+  const [connectionFailed, setConnectionFailed] = React.useState(false);
+  const [connectionAttempt, setConnectionAttempt] = React.useState(0);
   const [modal, setModal] = React.useState(null);
   const [projectToRemove,setProjectToRemove]=React.useState(null),[removingProject,setRemovingProject]=React.useState(false),[removalError,setRemovalError]=React.useState('');
   const [mottoSettingsOpen,setMottoSettingsOpen]=React.useState(false);
@@ -166,7 +183,11 @@ export function App({ api, nativeRender, nativeSentenceRender, onLeave = null, p
   const cacheDrafts = () => { try { localStorage.setItem(RECOVERY_KEY, JSON.stringify([...drafts.current])); } catch { setError('浏览器未能缓存未保存输入，请先保存资料再退出。'); } };
   React.useEffect(() => {
     mounted.current = true;
-    api.bootstrap().then((next) => {
+    let closed = false;
+    const controller = new AbortController();
+    setLoading(true); setConnectionFailed(false); setError('');
+    api.bootstrap({ signal: controller.signal, usePreload: connectionAttempt === 0 }).then((next) => {
+      if (closed) return;
       try {
         const recovery = JSON.parse(localStorage.getItem(RECOVERY_KEY) || '[]');
         if (Array.isArray(recovery)) for (const [objectId, entry] of recovery) {
@@ -176,9 +197,9 @@ export function App({ api, nativeRender, nativeSentenceRender, onLeave = null, p
         cacheDrafts();
       } catch { setError('未保存输入缓存无法读取，缓存原件仍保留。'); }
       accept(next); setDraftEpoch((n) => n + 1);
-    }).catch((e) => setError(e.message)).finally(() => setLoading(false));
-    return () => { mounted.current = false; };
-  }, [api, accept]);
+    }).catch((e) => { if (!closed) { setConnectionFailed(true); setError(e.message); } }).finally(() => { if (!closed) setLoading(false); });
+    return () => { closed = true; mounted.current = false; controller.abort(); };
+  }, [api, accept, connectionAttempt]);
   const mutate = async (action, data) => { const next = await api.mutate(action, data); accept(next); return next; };
   React.useEffect(() => {
     if (!api.stamp) return;
@@ -223,7 +244,7 @@ export function App({ api, nativeRender, nativeSentenceRender, onLeave = null, p
   }, [api, accept]);
   React.useEffect(() => { if (!drafts.current.size) return; const timer = setTimeout(() => void flush().catch((e) => setError(e.message)), 750); return () => clearTimeout(timer); }, [draftEpoch, flush]);
   React.useEffect(() => { const guard = (event) => { if (drafts.current.size || wordDirty.current) { event.preventDefault(); event.returnValue = ''; } }; window.addEventListener('beforeunload', guard); return () => window.removeEventListener('beforeunload', guard); }, []);
-  React.useEffect(() => { if (!state.projects.some((p) => p.jobs?.some((job) => ['queued', 'running'].includes(job.status)))) return; const interval = setInterval(() => api.bootstrap().then(accept).catch(() => {}), 1600); return () => clearInterval(interval); }, [state, api, accept]);
+  React.useEffect(() => { if (api.watchState || !state.projects.some((p) => p.jobs?.some((job) => ['queued', 'running'].includes(job.status)))) return; let closed=false;const interval = setInterval(() => api.bootstrap().then(next=>{if(!closed)accept(next)}).catch(() => {}), 1600); return () => {closed=true;clearInterval(interval)}; }, [state, api, accept]);
   const project = state.projects.find((item) => item.id === state.activeProjectId) || state.projects[0];
   const task = project?.activeTask || 'writing';
   const taskKey = project ? `${project.id}:${task}` : '';
@@ -314,7 +335,7 @@ export function App({ api, nativeRender, nativeSentenceRender, onLeave = null, p
     },
     onClassify: async (jobId,data) => { await mutate('classifySentence',{projectId:project.id,jobId,...data}); },
     onEditSuggestion:async(jobId,data)=>mutate('editSentenceSuggestion',{projectId:project.id,jobId,...data}),
-    onAction: async (action, jobId, options={}) => { if(!options.wordSaved)await saveAll(); return mutate(action, { projectId: project.id, jobId }); },
+    onAction: async (action, jobId, options={}) => { if(!options.wordSaved)await saveAll(); return mutate(action, { projectId: project.id, jobId, proposalUpdatedAt: options.proposalUpdatedAt, liveRevision:options.liveRevision }); },
     onImport: async data => { await mutate('importLiterature', { ...data, projectId: project.id }); },
   }} />;
   const chat = project && task !== 'writing' && <><div className="rw-chat-intro"><Icon name="link" size={12}/><span>已关联当前项目资料</span></div><div className="rw-chat-area">{nativeRender ? nativeRender({ project, task, projects: state.projects, acceptance: state.nativeAcceptance, onBinding: accept, onError: setError }) : <div className="rw-chat-empty"><div className="rw-chat-symbol"><Icon name="chat" size={23} /></div><h3>把思路留在研究现场</h3><p>{preview ? '这是独立界面预览。DSH 中会在此承载原生对话，沿用已有模型配置。' : '在 DSH Desktop 打开工作台，使用写作、制图和阅读各自的原生对话。'}<br />项目资料始终可以独立使用。</p></div>}</div></>;
@@ -324,7 +345,7 @@ export function App({ api, nativeRender, nativeSentenceRender, onLeave = null, p
       <div className="rw-brand"><span className="rw-brand-emblem"><Icon name="brand" size={18}/></span><strong>科研工作台</strong></div>
       <div className="rw-breadcrumb"><strong title={project?.rootPath||''}>{project?.title||'开启新的研究'}</strong>{project&&<><span className="rw-breadcrumb-divider" aria-hidden="true">/</span><h1 className="rw-task-label">{TASK_LABELS[task]}</h1></>}{project?.isDemo&&<span className="rw-sample-tag">实验示例</span>}</div>
       <MottoTicker settingsOpen={mottoSettingsOpen} onSettingsChange={setMottoSettingsOpen}/>
-      <div className="rw-top-actions"><span className="rw-save-state" data-dirty={changed||Boolean(error)}>{saveBusy?'正在保存':error?'有内容尚未保存':changed?'有未保存内容':project?.workspace?.checkpointError?'工作区待同步':'已保存'}</span>
+      <div className="rw-top-actions"><span className="rw-save-state" data-dirty={changed||Boolean(error)}>{saveBusy?'正在保存':connectionFailed?'连接未恢复':loading?'正在连接':error?'有内容尚未保存':changed?'有未保存内容':project?.workspace?.checkpointError?'工作区待同步':'已保存'}</span>
         <button className="rw-primary rw-global-save" disabled={!project||saveBusy} aria-label={isWord?'保存 Word':'保存资料'} title={isWord?'保存到同一 Word 工作副本（Ctrl+S）':'保存（Ctrl+S）'} onClick={()=>void safe(saveAll)()}><Icon name="save" size={14}/><span>保存</span></button>
         <button className="rw-icon-button" aria-label="后台任务" title={running?`${running} 个后台任务`:'后台任务'} onClick={()=>setModal('jobs')}><Icon name="clock" size={16}/>{running>0&&<small>{running}</small>}</button>
         <ActionMenu label="工作台与布局操作" icon="settings">
@@ -336,7 +357,7 @@ export function App({ api, nativeRender, nativeSentenceRender, onLeave = null, p
         {onLeave&&<button className="rw-icon-button" aria-label="返回 DSH" title="返回 DSH" onClick={()=>void safe(async()=>{await saveAll();onLeave()})()}><Icon name="arrow" size={16}/></button>}
       </div>
     </header>
-    {state.nativeAcceptance && <div className="rw-banner" role="status">{state.nativeAcceptance.mode === 'restore' ? '本机验收模式 · 测试草稿已保存，恢复检查由工作台继续完成；请勿发送。' : '本机验收模式 · 请把蓝色拖动柄拖到另一面板内，再拖动蓝色竖线；无需输入或发送消息。'}</div>}{preview && <div className="rw-banner rw-preview-banner"><span>界面预览 · 合成实验样例</span><span>仅本机</span></div>}{project?.workspace?.checkpointError && <div className="rw-banner" role="alert">{project.workspace.checkpointError}</div>}{error && <div className="rw-banner" data-error="true" role="alert"><span>{error}</span><button aria-label="关闭错误提示" className="rw-icon-button" onClick={() => setError('')}><Icon name="close" size={13} /></button></div>}
+    {state.nativeAcceptance && <div className="rw-banner" role="status">{state.nativeAcceptance.mode === 'restore' ? '本机验收模式 · 测试草稿已保存，恢复检查由工作台继续完成；请勿发送。' : '本机验收模式 · 请把蓝色拖动柄拖到另一面板内，再拖动蓝色竖线；无需输入或发送消息。'}</div>}{preview && <div className="rw-banner rw-preview-banner"><span>界面预览 · 合成实验样例</span><span>仅本机</span></div>}{project?.workspace?.checkpointError && <div className="rw-banner" role="alert">{project.workspace.checkpointError}</div>}{error && <div className="rw-banner" data-error="true" role="alert"><span>{error}</span>{connectionFailed && <button className="rw-secondary" disabled={loading} onClick={() => setConnectionAttempt(n => n + 1)}>重新连接</button>}<button aria-label="关闭错误提示" className="rw-icon-button" onClick={() => setError('')}><Icon name="close" size={13} /></button></div>}
     <div className="rw-body"><WorkbenchSidebar collapsed={sidebarCollapsed} project={project} task={task} object={object} onNewProject={openNewProject} onProjects={()=>setModal('projects')} onOpenWorkspace={()=>{setForm({path:'',title:''});setModal('open-workspace')}} onFiles={()=>setModal('workspace-files')} onTask={key=>void changeTask(key)} onNote={()=>void addNote()} onSelect={item=>void selectObject(item)} onImport={()=>importRef.current.click()} onResources={()=>setModal('resources')}/><input ref={importRef} hidden type="file" accept=".md,.markdown,.txt" aria-label="导入 Markdown 文件" onChange={event=>void importMarkdown(event)}/>
       <main className="rw-workspace">{project ? <><Dock task={task} layout={layout} onLayout={(value, event) => void safe(() => persistView({ layout: value, ...(event ? { layoutEvent: event } : {}) }))()}>{{ main: content, context, chat }}</Dock></> : <div className="rw-empty"><div className="rw-empty-mark"><Icon name="brand" size={31} /></div><div><h1>让一个研究问题，成为一篇论文。</h1><p>{loading ? '正在打开本机工作台…' : '把论证、数据、图表和文献放回同一处。每个任务保留自己的对话，每个项目保留自己的研究现场。'}</p></div><div className="rw-empty-buttons"><button className="rw-primary" onClick={openNewProject}><Icon name="plus" size={15} />新建论文项目</button><button className="rw-secondary" onClick={() => void createProject(true)}>打开实验示例<Icon name="arrow" size={14} /></button></div></div>}</main></div>
     {notice && <div role="status" className="rw-toast">{notice}</div>}

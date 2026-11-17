@@ -3,21 +3,30 @@ import { sentenceAnchor, replaceSentence } from '../../dist/writing-document.mjs
 import { StoreError } from './store.mjs';
 import { WritingEvidence } from './writing-evidence.mjs';
 import { DEFAULT_REVISION_PROMPT, validateSentenceChanges } from '../shared/revision-review.mjs';
+import { citationMarkers } from './citation-markers.mjs';
 
 const now = () => new Date().toISOString();
 const requireThat = (value, code, message, status = 400) => { if (!value) throw new StoreError(code, message, status); };
 const digest = text => createHash('sha256').update(text).digest('hex');
 export const DEFAULT_SENTENCE_PROMPT = DEFAULT_REVISION_PROMPT;
 
-export function validateProposal(text, selectedText, evidence) {
+export function validateProposal(text, selectedText, evidence, originalParagraphs) {
   let value; try { value = JSON.parse(text.trim().replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '')); } catch { throw new StoreError('INVALID_PROPOSAL', '模型未返回有效的改写格式，请重试。', 502); }
-  requireThat(typeof value.replacement === 'string' && value.replacement.trim() && value.replacement.length <= 8000 && !/[\r\n]/.test(value.replacement), 'INVALID_PROPOSAL', '模型未返回完整的单段改写，请重试。', 502);
+  requireThat(value && typeof value === 'object' && !Array.isArray(value), 'INVALID_PROPOSAL', '模型未返回有效的改写格式，请重试。', 502);
+  const validParagraph = (item, limit) => typeof item === 'string' && item.trim() && item.length <= limit && !/[\r\n\0]/.test(item);
+  if (originalParagraphs) {
+    requireThat(Array.isArray(value.paragraphs) && value.paragraphs.length === originalParagraphs.length && value.paragraphs.every(item => validParagraph(item, 4000)), 'INVALID_PROPOSAL', '章节建议须为每个原段落返回一个非空段落。', 502);
+    value.paragraphs = value.paragraphs.map(item => item.trim());
+    requireThat(value.paragraphs.reduce((total, item) => total + item.length, 0) <= 16000, 'INVALID_PROPOSAL', '章节改写总长度不能超过 16000 字符。', 502);
+    requireThat(value.paragraphs.some((item, index) => item !== originalParagraphs[index]), 'INVALID_PROPOSAL', '章节建议没有可采用的文字变化。', 502);
+    value.replacement = value.paragraphs.join('\n\n');
+  } else requireThat(validParagraph(value.replacement, 8000), 'INVALID_PROPOSAL', '模型未返回完整的单段改写，请重试。', 502);
   requireThat(typeof value.reason === 'string' && value.reason.length <= 4000 && Array.isArray(value.evidenceIds) && value.evidenceIds.length <= 10 && Array.isArray(value.warnings) && value.warnings.length <= 12 && value.warnings.every(x => typeof x === 'string' && x.length <= 2000), 'INVALID_PROPOSAL', '模型依据或说明的格式不完整，请重试。', 502);
   requireThat(value.evidenceIds.every(id => evidence.sources.some(x => x.id === id && !x.synthetic)), 'UNSUPPORTED_EVIDENCE', '模型引用了未检索到的证据或合成资料，结果未采用，请重试。', 502);
-  const markers = text => [...text.matchAll(/\[@[^\]]+\]|\[(?:\d+[\s,，–-]*)+\]/g)].map(x => x[0]).sort().join('|');
-  requireThat(markers(selectedText) === markers(value.replacement), 'CITATION_CHANGED', '模型更改或新增了引用标记，已拦截；原文保留，请重试。', 502);
+  requireThat(JSON.stringify(citationMarkers(selectedText).sort()) === JSON.stringify(citationMarkers(value.replacement).sort()),
+    'CITATION_CHANGED', '模型更改或新增了引用标记，已拦截；原文保留，请重试。', 502);
   const replacement=value.replacement.trim();
-  return { replacement, reason: value.reason, evidenceIds: [...new Set(value.evidenceIds)], warnings: value.warnings, ...(validateSentenceChanges(value.sentenceChanges,selectedText,replacement)?{sentenceChanges:value.sentenceChanges.map(row=>({before:row.before,after:row.after,kind:row.kind,reason:row.reason,source:'model'}))}:{}) };
+  return { replacement, reason: value.reason, evidenceIds: [...new Set(value.evidenceIds)], warnings: value.warnings, ...(originalParagraphs ? { paragraphs: value.paragraphs } : validateSentenceChanges(value.sentenceChanges,selectedText,replacement)?{sentenceChanges:value.sentenceChanges.map(row=>({before:row.before,after:row.after,kind:row.kind,reason:row.reason,source:'model'}))}:{}) };
 }
 export class SentenceWriting {
   constructor(store, { evidence = new WritingEvidence(store), generate = null } = {}) { this.store = store; this.evidence = evidence; this.generate = generate; }
