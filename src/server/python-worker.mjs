@@ -10,7 +10,13 @@ export class PythonWorker {
     child.on('error',failed);child.on('close',failed);child.stderr.resume();child.stdin.on('error',()=>{});child.stdout.setEncoding('utf8');
     child.stdout.on('data',chunk=>{
       this.buffer+=chunk;if(this.buffer.length>2*1024*1024){this.child=null;this.current?.reject(Error('Word 检查结果超过上限。'));this.current=null;child.kill();return}
-      let newline;while((newline=this.buffer.indexOf('\n'))>=0){const line=this.buffer.slice(0,newline);this.buffer=this.buffer.slice(newline+1);const pending=this.current;if(!pending)continue;let value;try{value=JSON.parse(line)}catch{this.child=null;pending.reject(Error('Word 处理结果格式无效。'));this.current=null;child.kill();return}if(value.id!==pending.id)continue;this.current=null;value.error?pending.reject(Error(value.error)):pending.resolve(value.result)}
+      let newline;while((newline=this.buffer.indexOf('\n'))>=0){const line=this.buffer.slice(0,newline);this.buffer=this.buffer.slice(newline+1);const pending=this.current;if(!pending)continue;let value;try{value=JSON.parse(line)}catch{this.child=null;pending.reject(Error('Word 处理结果格式无效。'));this.current=null;child.kill();return}if(value.id!==pending.id)continue;this.current=null;
+        if (value.error) {
+          const error = Error(value.error);
+          if (value.errorCode) error.code = value.errorCode;
+          pending.reject(error);
+        } else pending.resolve(value.result);
+      }
     });
   }
   call(args){

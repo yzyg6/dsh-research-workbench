@@ -2,19 +2,24 @@ import {wordCommand} from '../shared/word-live.mjs';
 
 /** Operate the same in-memory engine as the author; never rebuild the DOCX. */
 export class WordLiveEditor {
-  constructor({bridge,save,managed,revision,dirty,loadFonts=async()=>{},active=()=>{}}){Object.assign(this,{bridge,save,managed,revision,dirty,loadFonts,active});this.context=null}
+  constructor({bridge,save,managed,revision,dirty,applyText,loadFonts=async()=>{},active=()=>{}}){Object.assign(this,{bridge,save,managed,revision,dirty,applyText,loadFonts,active});this.context=null}
   async run(request){
     this.active();await this.managed();this.active();
     if(request.kind==='context'){
       await this.save();this.active();
-      const selection=await this.bridge.execute('document.selection',{}),text=await this.bridge.execute('document.text',{}),document=await this.bridge.execute('document.inspect',{text:false}),fonts=await this.bridge.execute('font.list',{all:true});
+      const selection=await this.bridge.execute('document.selection',{}),text=request.plan?.query?{}:await this.bridge.execute('document.text',{}),document=await this.bridge.execute('document.inspect',{text:false}),fonts=request.plan?.query?{}:await this.bridge.execute('font.list',{all:true});
       const contextId=crypto.randomUUID();this.context={id:contextId,revision:this.revision(),selection,document:JSON.stringify(document)};
+      if(request.plan?.query)return {contextId,revision:this.revision()};
       const outline={pages:document.pages,words:document.words,trackChanges:document.trackChanges,canUndo:document.canUndo,canRedo:document.canRedo,blocks:(document.blocks||[]).slice(0,80).map(({index,type,style,props,rows,cols})=>({index,type,style,props,rows,cols}))};
       return{contextId,revision:this.revision(),selection:{...selection,text:String(selection.text||'').slice(0,8000)},text:String(text.text||'').slice(0,180000),truncated:(text.text?.length||0)>180000,document:outline,availableFonts:fonts.families||[]};
     }
     if(request.kind!=='edit')throw Error('未知 Word 编辑请求。');
     const context=this.context;this.context=null;
     if(!context||context.id!==request.contextId||context.revision!==this.revision()||this.dirty())throw Error('Word 已编辑或保存，请重新读取当前文稿。');
+    if(request.plan.action==='replace_text'){
+      this.active();
+      return this.applyText(request.id);
+    }
     const document=await this.bridge.execute('document.inspect',{text:false});this.active();
     if(JSON.stringify(document)!==context.document)throw Error('Word 内容或选区已变化，请重新读取。');
     const plan=request.plan,{command,params}=wordCommand(plan);
@@ -39,7 +44,7 @@ export function connectWordLive({api,owner,editor,lock,onError,onSaved,onConnect
       const {request}=await api.wordControl('poll',owner);if(closed)return;
       failures=0;if(offline){offline=false;onRecovered?.()}if(!request)return;
       lock(true);
-      try{receipt={id:request.id,result:await editor.run(request)};if(request.kind==='edit')onSaved?.()}
+      try{receipt={id:request.id,result:await editor.run(request)};if(request.kind==='edit')onSaved?.(receipt.result)}
       catch(error){receipt={id:request.id,error:error.message};onError?.(error.message)}
       finally{lock(false)}
       if(!closed){await api.wordControl('ack',{...owner,...receipt});receipt=null}

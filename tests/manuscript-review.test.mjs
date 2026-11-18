@@ -10,6 +10,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { WorkspaceRuntime } from '../src/server/runtime.mjs';
 import { WordEditing } from '../src/server/word-edit.mjs';
 import { createSectionReplyReader } from '../src/server/review-agents.mjs';
+import { MANUSCRIPT_REVIEW_GUIDANCE, MANUSCRIPT_REVIEW_TEMPLATES, MANUSCRIPT_REVISION_GUIDANCE, MANUSCRIPT_SECTION_RULE, PROMPT_TEMPLATES } from '../src/shared/revision-review.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const exec = promisify(execFile);
@@ -62,11 +63,12 @@ test('reviews run parallel section workers, resume selectively, exchange finding
     const discussion = await runtime.nativeWriting.open({ projectId, objectId });
     await runtime.nativeWriting.bind({ projectId, jobId: discussion, sessionId });
     const calls = [];
-    let active = 0, peak = 0, rejectFirst = true;
+    let active = 0, peak = 0, malformedReplies = 0, malformedCrossReplies = 0;
+    const malformed = '{"summary":"本节称为"合成估计"。","findings":[]}';
     const fakeAgent = async ({ parentId, childId, prompt, published }) => {
       assert.equal(parentId, sessionId);
       const payload = JSON.parse(prompt.split('\n').at(-1));
-      calls.push({ childId, payload });
+      calls.push({ childId, payload, prompt });
       if (!childId) await published('synthetic-child-' + (payload.section?.id || 'coordinator'));
       active++;
       peak = Math.max(peak, active);
@@ -80,19 +82,22 @@ test('reviews run parallel section workers, resume selectively, exchange finding
       if (!payload.section) return JSON.stringify(payload.sections
         ? { summary: '统一全文计量口径。', plan: [{ step: '先明确方法定义，再检查结果。', findings: ['1-1', '2-1', 'forged'] }] }
         : { answer: '该结果依赖方法中已定义的单位。' });
-      if (payload.section.id === 2 && rejectFirst) {
-        rejectFirst = false;
-        return 'invalid JSON';
-      }
+      if (payload.section.id === 2 && (payload.peers ? malformedCrossReplies++ < 2 : malformedReplies++ < 3)) return malformed;
       const paragraph = payload.section.paragraphs[0];
       assert.equal(payload.section.paragraphs.length, 2);
+      if (payload.section.id === 2 && payload.peers && payload.repair?.concise) {
+        assert(prompt.includes('FINDING\t'));
+        return `\x60\x60\x60tsv\nSUMMARY\t残余口径已复核。\nFINDING\t${paragraph.index}\t${paragraph.text}\t"计量口径"需要说明。\t沿用方法节的定义。\n\x60\x60\x60`;
+      }
+      const incomplete = payload.section.id === 1 && !payload.peers;
       const result = JSON.stringify({ summary: '计量口径需要相互核对。', findings: [{
-        index: paragraph.index, quote: paragraph.text, issue: '未定义适用口径。',
+        index: incomplete ? 999 : paragraph.index, quote: paragraph.text, issue: '未定义适用口径。',
         suggestion: '解释统一口径。',
-        steps: payload.section.id === 1 ? ['先定义口径。', '再解释其适用范围。'] : '先定义，再解释其适用范围。',
-        prompt: '结合前文说明口径并保留已有单位。',
+        ...(!incomplete ? { steps: payload.section.id === 1 ? ['先定义口径。', '再解释其适用范围。'] : '先定义，再解释其适用范围。' } : {}),
+        ...(payload.section.id === 2 ? { prompt: '结合前文说明口径并保留已有单位。' } : {}),
         scope: 'chapter', links: [1, 2, 99],
       }] });
+      if (incomplete) return '<acp source="fixture">continuation</acp>\n审阅回执如下。\n```json\n' + result + '\n```\n<acp source="fixture">end</acp>';
       return payload.peers && payload.section.id === 1 ? '<acp source="fixture">continuation</acp>\n' + result : result;
     };
     runtime.review.agent = fakeAgent;
@@ -109,20 +114,47 @@ test('reviews run parallel section workers, resume selectively, exchange finding
     };
     await wait('failed');
     assert.equal(peak, 2);
-    assert.equal(state().workers[0].status, 'read', 'a verified Word quote with array steps must pass initial review');
+    assert.equal(state().workers[0].status, 'read', 'a single JSON envelope and missing redundant fields need no model retry');
+    const failedCalls = calls.filter(c => c.payload.section?.id === 2);
+    assert.equal(failedCalls.length, 3, 'two bounded automatic repair attempts for malformed JSON');
+    assert.equal(failedCalls[1].childId, 'synthetic-child-2', 'repair continues in the existing section session');
+    assert.equal(failedCalls[1].payload.repair.code, 'REVIEW_RESPONSE_INVALID');
+    assert.equal(failedCalls[2].payload.repair.concise, true);
     assert.deepEqual(state().workers.map(w => w.path), [['1 方法','1.1 合成采样'], ['2 结果','2.1 合成估计值']]);
+    runtime.review.previousSectionReply = async ({ sectionId, childId, exchange }) => {
+      assert.equal(sectionId, 2);
+      assert.equal(childId, 'synthetic-child-2');
+      assert.equal(exchange, false);
+      return malformed;
+    };
     await runtime.mutate('resumeManuscriptReview', owner);
     await runtime.review.running.get(jobId)?.operation;
     assert.equal(state().status, 'draft', state().error);
     const drafted = await wait('draft');
     assert.deepEqual(drafted.workers.map(w => w.status), ['standby', 'standby']);
     assert.equal(calls.filter(c => c.payload.section?.id === 1 && !c.payload.peers).length, 1);
-    assert.equal(calls.filter(c => c.payload.section?.id === 2 && !c.payload.peers)[1].childId, 'synthetic-child-2');
+    const resumedCall = calls.filter(c => c.payload.section?.id === 2 && !c.payload.peers)[3];
+    assert.equal(resumedCall.childId, 'synthetic-child-2');
+    assert.equal(resumedCall.payload.repair.code, 'REVIEW_RESPONSE_INVALID');
+    for (const call of calls.filter(c => c.payload.section)) {
+      assert(call.prompt.startsWith(MANUSCRIPT_REVIEW_GUIDANCE));
+      assert.equal(call.payload.authorRequest, data.instruction);
+    }
     for (const call of calls.filter(c => c.payload.peers)) {
       assert.equal(call.childId, 'synthetic-child-' + call.payload.section.id);
       assert.equal(call.payload.peers.length, 1);
       assert.notEqual(call.payload.peers[0].id, call.payload.section.id);
     }
+    const crossCalls = calls.filter(c => c.payload.section?.id === 2 && c.payload.peers);
+    assert.equal(crossCalls.length, 3);
+    assert.equal(crossCalls[2].payload.repair.concise, true);
+    assert.equal(drafted.findings[1].issue, '"计量口径"需要说明。');
+    const peerFinding = crossCalls[0].payload.peers[0].findings[0];
+    assert.equal(peerFinding.quote, '合成方法采用两种计量口径。');
+    const firstFinding = calls.find(c => c.payload.section?.id === 1 && c.payload.peers).payload.first.findings[0];
+    assert.equal(firstFinding.index, 2);
+    assert.equal(firstFinding.steps, '解释统一口径。');
+    assert.equal(firstFinding.prompt, '解释统一口径。');
     assert.deepEqual(await readFile(originalPath), original);
     const route = new URL('http://local/api/research-workbench/review-status');
     route.search = new URLSearchParams(owner);
@@ -134,6 +166,10 @@ test('reviews run parallel section workers, resume selectively, exchange finding
     const finished = await wait('succeeded');
     assert.deepEqual(finished.plan[0].findings, ['1-1', '2-1']);
     assert.equal(finished.commentRevision, 2);
+    assert(calls.find(c => c.payload.sections).prompt.startsWith(MANUSCRIPT_REVISION_GUIDANCE));
+    for (const template of [...MANUSCRIPT_REVIEW_TEMPLATES, ...PROMPT_TEMPLATES]) {
+      assert(template.prompt.includes(MANUSCRIPT_SECTION_RULE), template.id);
+    }
     await runtime.mutate('arrangeReviewRelations',owner);
     const arranged=await wait('succeeded');
     assert.equal(arranged.findings[0].kind,'meaning');
@@ -147,8 +183,8 @@ test('reviews run parallel section workers, resume selectively, exchange finding
     assert.equal(receipt.comments.length, 3);
     assert.equal(receipt.comments[0], '已有的合成批注。');
     assert.match(receipt.comments[1], /修改路径：先定义口径。再解释其适用范围。/);
-    assert.match(receipt.comments[2], /修改路径：先定义，再解释其适用范围。/);
-    assert.match(receipt.comments[1], /提示词：结合前文/);
+    assert.match(receipt.comments[2], /修改路径：沿用方法节的定义。/);
+    assert.match(receipt.comments[1], /提示词：解释统一口径。先定义口径。再解释其适用范围。/);
     assert.equal(await runtime.wordEditing.context(projectId, objectId), (await runtime.wordEditing.inspect({ path: originalPath })).text);
     await runtime.dispose();
     runtime = new WorkspaceRuntime(config);
@@ -158,6 +194,7 @@ test('reviews run parallel section workers, resume selectively, exchange finding
     await runtime.mutate('followManuscriptReview', { ...owner, target: 2, message: '结果用哪个口径？' });
     const replied = await wait('succeeded');
     assert.equal(calls.at(-1).childId, 'synthetic-child-2');
+    assert(calls.at(-1).prompt.startsWith(MANUSCRIPT_REVISION_GUIDANCE));
     assert.match(replied.messages.at(-1).text, /依赖方法/);
     const finding = { ...owner, findingId: '1-1' };
     const located = await runtime.review.target({ ...finding, scope: 'locate' });
@@ -166,6 +203,7 @@ test('reviews run parallel section workers, resume selectively, exchange finding
     assert.equal(state().findings[0].decision.dismissed, true);
     const { actionResult: revision } = await runtime.mutate('prepareReviewRevision', { ...finding, scope: 'chapter' });
     assert.match(revision.instruction, /修改路径/);
+    assert(revision.instruction.endsWith(MANUSCRIPT_REVISION_GUIDANCE));
     assert.equal(state().findings[0].decision.dismissed, false);
     assert.equal(runtime.store.object(projectId, objectId).revision, 2);
     await runtime.nativeWriting.userTurn(sessionId, [{ role: 'user', content: [{ type: 'text', text: revision.instruction }] }], { provider: 'test', model: 'test' }, 1);
@@ -209,6 +247,56 @@ test('the first Word comment adds the required OOXML parts without changing docu
   await exec('python', ['-I', '-c', check, output], { windowsHide: true });
 });
 
+test('batch drafting falls back to the anchored paragraph for both chapter range and inline formatting restrictions', async () => {
+  const out = join(root, '_scratch/out/review-tests');
+  await mkdir(out, { recursive: true });
+  const base = await mkdtemp(join(out, 'restricted-ranges-'));
+  const runtime = new WorkspaceRuntime({ root: join(base, 'catalog'), publicRoot: join(root, 'public'), sampleRoot: join(root, 'samples/figure') });
+  try {
+    const projectId = await runtime.store.createProject({ title: '合成选区测试' });
+    const originalPath = join(runtime.store.project(projectId).root_path, 'paper', 'synthetic.docx');
+    await exec('python', ['-I', join(root, 'probes/manuscript-review/create-fixture.py'), originalPath, '--restricted-review-ranges'], { windowsHide: true });
+    const original = await readFile(originalPath);
+    const objectId = await runtime.store.importWorkspaceFile({ projectId, path: 'paper/synthetic.docx' });
+    runtime.nativeWriting.validateSession = async () => {};
+    const discussion = await runtime.nativeWriting.open({ projectId, objectId });
+    await runtime.nativeWriting.bind({ projectId, jobId: discussion, sessionId });
+    const drafts = [];
+    runtime.review.agent = async ({ childId, prompt, published }) => {
+      const data = JSON.parse(prompt.split('\n').at(-1));
+      if (data.task === 'draft-review-revision') {
+        drafts.push(data);
+        assert.equal(data.scope, 'paragraph');
+        return JSON.stringify({ replacement: data.original.replace(/。$/, '，已复核。'), reason: '补充合成说明。', evidenceIds: [], warnings: [] });
+      }
+      if (!childId) await published('ranges-' + (data.section?.id || 'coordinator'));
+      if (!data.section) return JSON.stringify({ summary: '已审阅。' });
+      const paragraph = data.section.paragraphs[0];
+      return JSON.stringify({ summary: '已审阅。', findings: [{ index: paragraph.index, quote: paragraph.text, issue: '说明不足。', suggestion: '说明已复核。', scope: 'chapter' }] });
+    };
+    const { jobId } = await runtime.review.start({ projectId, objectId, expectedRevision: 1, operationKey: randomUUID() });
+    const owner = { projectId, objectId, jobId };
+    const finish = async () => runtime.review.running.get(jobId)?.operation;
+    await finish();
+    await runtime.review.publish(owner);
+    await finish();
+    await runtime.review.startBatch({ ...owner, findingIds: ['1-1', '2-1'], expectedRevision: 2, operationKey: randomUUID() });
+    await finish();
+    const items = runtime.review.batchView(owner).batch.items;
+    assert.deepEqual(items.map(item => [item.state, item.scope]), [['ready', 'paragraph'], ['ready', 'paragraph']]);
+    assert.equal(drafts.length, 2);
+    assert.equal(runtime.store.object(projectId, objectId).revision, 2, 'generating proposals leaves Word untouched');
+    for (const item of items) {
+      const before = await runtime.wordEditing.context(projectId, objectId);
+      const job = runtime.review.batchProposal({ ...owner, findingId: item.findingId });
+      await runtime.mutate('applySentence', { projectId, jobId: item.jobId, proposalUpdatedAt: job.updatedAt });
+      const after = await runtime.wordEditing.context(projectId, objectId);
+      assert.equal(after, before.replace(job.output.original, job.output.proposal.replacement));
+    }
+    assert.deepEqual(await readFile(originalPath), original);
+  } finally { await runtime.dispose(); }
+});
+
 test('batch drafting reuses the review agents and accepts only a single revalidated Word target at a time', async () => {
   const out = join(root, '_scratch/out/review-tests');
   await mkdir(out, { recursive: true });
@@ -231,6 +319,8 @@ test('batch drafting reuses the review agents and accepts only a single revalida
       const data = JSON.parse(prompt.split('\n').at(-1));
       if (data.task === 'draft-review-revision') {
         assert.equal(childId, `batch-child-${data.finding.workerId}`);
+        assert(prompt.startsWith(MANUSCRIPT_REVISION_GUIDANCE));
+        assert.equal(data.authorRequest, MANUSCRIPT_REVIEW_TEMPLATES[0].prompt);
         assert(!busyChildren.has(childId), 'each child receives its own suggestions serially');
         busyChildren.add(childId);
         calls.push(data);

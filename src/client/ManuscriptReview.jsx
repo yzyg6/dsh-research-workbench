@@ -1,5 +1,5 @@
 import React from 'react';
-import { MANUSCRIPT_REVIEW_TEMPLATES } from '../shared/revision-review.mjs';
+import { MANUSCRIPT_REVIEW_TEMPLATES, MANUSCRIPT_SECTION_RULE } from '../shared/revision-review.mjs';
 import { PromptTemplateModule } from './WordRevisionModules.jsx';
 import { ReviewDegreeBadge, ReviewRelationGraph, ReviewResolutionBadge } from './ReviewRelationGraph.jsx';
 import { REVIEW_DEGREES, reviewDegree } from '../shared/review-relations.mjs';
@@ -7,6 +7,7 @@ import { REVIEW_DEGREES, reviewDegree } from '../shared/review-relations.mjs';
 const stateLabel = { waiting: '已分派', reading: '审阅中', read: '初审完成', exchange: '交流中', standby: '待命', responding: '回复中', revising: '改稿中', failed: '可重试' };
 const isActive = value => ['queued', 'running'].includes(value);
 const instructionLimit = 3000;
+const copyRevisionPrompt = prompt => navigator.clipboard.writeText(prompt.includes(MANUSCRIPT_SECTION_RULE) ? prompt : `${MANUSCRIPT_SECTION_RULE}\n\n${prompt}`);
 
 export function ManuscriptReviewPanel({ api, projectId, objectId, revision, busy, origin, onStart, onPublish, onShowComments, onLocate, onPrepare, onOpenComparison, onStartBatch, onOpenBatch }) {
   const [snapshot, setSnapshot] = React.useState(null);
@@ -27,6 +28,10 @@ export function ManuscriptReviewPanel({ api, projectId, objectId, revision, busy
   const graph = React.useRef(null);
   const owner = { projectId, objectId, jobId: snapshot?.id };
   const running = isActive(snapshot?.status);
+  const reviewingFirst = snapshot?.stage === 'reading';
+  const reviewProgress = reviewingFirst ? '初审完成' : snapshot?.stage === 'exchange' ? '复核完成' : '待命';
+  const completedWorkers = snapshot?.workers?.filter(worker => worker.status === (reviewingFirst ? 'read' : 'standby')).length ?? 0;
+  const failedWorkers = snapshot?.workers?.filter(worker => worker.status === 'failed').length ?? 0;
   const canReply = !newReview && ['ready', 'comments'].includes(snapshot?.stage) && !running;
   const template = MANUSCRIPT_REVIEW_TEMPLATES.find(item => item.id === templateId);
   const appendTemplate = Boolean(draft.trim()) && !MANUSCRIPT_REVIEW_TEMPLATES.some(item => item.prompt === draft);
@@ -156,7 +161,7 @@ export function ManuscriptReviewPanel({ api, projectId, objectId, revision, busy
         {snapshot.error && <p className="rw-sentence-warning">{snapshot.error}</p>}
         {snapshot.documentChanged && <p className="rw-native-sentence-notice">这轮意见来自 Word 版本 {snapshot.revision}。写入批注前会核对审阅内容，定位时会检查当前段落。</p>}
         <details className="rw-review-dispatch" open={running || undefined}>
-          <summary>子智能体调度 · {snapshot.workers.filter(worker => worker.status === 'standby').length}/{snapshot.workers.length} 待命</summary>
+          <summary>子智能体调度 · {completedWorkers}/{snapshot.workers.length} {reviewProgress}{failedWorkers > 0 && ` · ${failedWorkers} 个可重试`}</summary>
           <ul>{snapshot.workers.map(worker => <li key={worker.id}>
             <div><strong>{worker.path.join(' › ')}</strong><small>{stateLabel[worker.status]}</small></div>
             {worker.summary && <p>{worker.summary}</p>}
@@ -185,7 +190,7 @@ export function ManuscriptReviewPanel({ api, projectId, objectId, revision, busy
           </li>)}</ol>}
           {snapshot.summaryPrompt && <details className="rw-review-finding"><summary>全文修改提示词</summary>
             <p>{snapshot.summaryPrompt}</p>
-            <button className="rw-secondary" onClick={() => void run(() => navigator.clipboard.writeText(snapshot.summaryPrompt), () => setCopyNotice('summary'))}>
+            <button className="rw-secondary" onClick={() => void run(() => copyRevisionPrompt(snapshot.summaryPrompt), () => setCopyNotice('summary'))}>
               {copyNotice === 'summary' ? '已复制提示词' : '复制全文提示词'}</button>
           </details>}
         </div>}
@@ -221,7 +226,7 @@ export function ManuscriptReviewPanel({ api, projectId, objectId, revision, busy
           <div className="rw-review-actions">
             <button type="button" className="rw-secondary" onClick={() => showGraph(item.id)}>查看关联图</button>
             <button disabled={pending || busy} className="rw-secondary" onClick={() => void run(() => onLocate({ ...owner, findingId: item.id }))}>定位到 Word</button>
-            <button className="rw-secondary" disabled={pending} onClick={() => void run(() => navigator.clipboard.writeText(item.prompt), () => setCopyNotice(item.id))}>
+            <button className="rw-secondary" disabled={pending} onClick={() => void run(() => copyRevisionPrompt(item.prompt), () => setCopyNotice(item.id))}>
               {copyNotice === item.id ? '已复制提示词' : '复制提示词'}</button>
             {batchItems.has(item.id) && <button className="rw-primary" onClick={() => onOpenBatch(owner.jobId, item.id)}>打开这条批量对照</button>}
             {!batchItems.has(item.id) && !item.decision.dismissed && <button className="rw-primary" disabled={pending || busy || running}

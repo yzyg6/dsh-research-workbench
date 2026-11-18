@@ -111,8 +111,8 @@ def replace_parts(source: str, parts: dict, output: str, undo: str = None) -> di
     return result_info
 
 
-def replace_xml(source: str, xml: bytes, output: str, undo: str = None) -> dict:
-    data = read(source)
+def replace_xml(source: str, xml: bytes, output: str, undo: str = None, *, source_bytes=None) -> dict:
+    data = read(source) if source_bytes is None else source_bytes
     infos, start, records, ending, comment, member, stop = layout(data)
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, 'w', allowZip64=False) as single:

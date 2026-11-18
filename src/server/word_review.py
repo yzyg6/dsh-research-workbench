@@ -39,7 +39,7 @@ def paragraphs(root: ET.Element) -> dict[int, str]:
             for i, node in enumerate(body_blocks(root)) if node.tag == q('p')}
 
 
-def outline(archive: zipfile.ZipFile, root: ET.Element) -> list[dict]:
+def outline(archive: zipfile.ZipFile, root: ET.Element, *, include_empty=False) -> list[dict]:
     styles = {}
     if 'word/styles.xml' in archive.namelist():
         for style in ET.fromstring(xml_part(archive, 'word/styles.xml')).findall(q('style')):
@@ -104,14 +104,14 @@ def outline(archive: zipfile.ZipFile, root: ET.Element) -> list[dict]:
             continue
         level = heading_level(node, text)
         if level:
-            if current['paragraphs']:
+            if current['paragraphs'] or include_empty and current['heading'] is not None:
                 sections.append(current)
             hierarchy = [(depth, title) for depth, title in hierarchy if depth < level]
             hierarchy.append((level, text[:180]))
             current = {'title': text[:180], 'path': [title for _, title in hierarchy], 'heading': index, 'paragraphs': []}
         else:
             current['paragraphs'].append({'index': index, 'text': text, 'anchorable': bool(exact[index].strip())})
-    if current['paragraphs']:
+    if current['paragraphs'] or include_empty and current['heading'] is not None:
         sections.append(current)
     return sections
 

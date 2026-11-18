@@ -8,22 +8,41 @@ import {mkdir,mkdtemp,readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {WorkspaceRuntime} from '../../src/server/runtime.mjs';
+import {MANUSCRIPT_REVIEW_TEMPLATES} from '../../src/shared/revision-review.mjs';
 const syncMode=process.argv.includes('--manuscript-sync');
 const batchMode=process.argv.includes('--manuscript-batch');
 const auditMode=syncMode||batchMode||process.argv.includes('--manuscript-audit');
+const translationMode=process.argv.includes('--manuscript-translation');
+const directMode=process.argv.includes('--direct-chat-text');
 const chapterMode=process.argv.includes('--chapter');
-const reviewMode=chapterMode||process.argv.includes('--review'),workbenchMode=auditMode||chapterMode||process.argv.includes('--workbench');
+const reviewMode=chapterMode||process.argv.includes('--review'),workbenchMode=auditMode||translationMode||directMode||chapterMode||process.argv.includes('--workbench');
 const root=fileURLToPath(new URL('../../',import.meta.url)),out=join(root,reviewMode?'_scratch/out/word-review-browser':'_scratch/out/word-live-browser');await mkdir(out,{recursive:true});const directory=await mkdtemp(join(out,'case-'));
 const runtime=new WorkspaceRuntime({root:join(directory,'catalog'),sampleRoot:join(root,'samples/figure'),publicRoot:join(root,'public'),trustedTransport:false});
 const projectId=await runtime.store.createProject({title:'Word 实时编辑合成验收'}),workspace=runtime.store.project(projectId).root_path,originalFile=join(workspace,'paper','synthetic.docx');
-await promisify(execFile)('python',['-I',join(root,'probes/word-edit/create-format-fixture.py'),originalFile],{windowsHide:true});
+await promisify(execFile)('python',['-I',join(root,'probes/word-edit/create-format-fixture.py'),originalFile,...(directMode?['--references']:[])],{windowsHide:true});
 await promisify(execFile)('python',['-I','-c',"import sys,zipfile; p=sys.argv[1]; z=zipfile.ZipFile(p); members={n:z.read(n) for n in z.namelist()}; z.close(); members['word/document.xml']=members['word/document.xml'].replace(b'<w:tbl>',b'<w:p/><w:p/><w:tbl>'); z=zipfile.ZipFile(p,'w',zipfile.ZIP_DEFLATED); [z.writestr(n,b) for n,b in members.items()]; z.close()",originalFile],{windowsHide:true});
 if(reviewMode)await promisify(execFile)('python',['-I',join(root,'probes/word-reader/create-fixture.py'),'--output',originalFile,'--paragraphs','80'],{windowsHide:true});
-if(auditMode)await promisify(execFile)('python',['-I',join(root,'probes/manuscript-review/create-fixture.py'),originalFile],{windowsHide:true});
+if(auditMode)await promisify(execFile)('python',['-I',join(root,'probes/manuscript-review/create-fixture.py'),originalFile,...(batchMode?['--separate-review-pages']:[])],{windowsHide:true});
+if(translationMode)await promisify(execFile)('python',['-I',join(root,'probes/manuscript-review/create-fixture.py'),originalFile,'--translation-fixture'],{windowsHide:true});
 const original=await readFile(originalFile),objectId=await runtime.store.importWorkspaceFile({projectId,path:'paper/synthetic.docx',openOriginal:true});
 if(workbenchMode)await runtime.store.saveTaskState({projectId,task:'writing',patch:{selectedObjectId:objectId}});
 runtime.nativeWriting.validateSession=async()=>{};runtime.nativeWriting.attachSession=async()=>{};
 const jobId=await runtime.nativeWriting.open({projectId,objectId}),sessionId='session-00000000-1111-2222-3333-444444444444';await runtime.nativeWriting.bind({projectId,jobId,sessionId});
+const paragraphGate=Promise.withResolvers();
+if(translationMode)runtime.translation.agent=async({childId,prompt,published})=>{
+  const content=JSON.parse(prompt.split('\n').at(-1));
+  if(!childId)await published(crypto.randomUUID());
+  if(content.task==='section-review')return JSON.stringify({translations:content.drafts});
+  if(content.task!=='paragraph-translation')return JSON.stringify({notes:'Synthetic translation plan.',glossary:[]});
+  const translations = {
+    '合成方法采用两种计量口径。':'The synthetic method uses two accounting definitions.',
+    '合成方法采用三种计量口径。':'The synthetic method uses three accounting definitions.',
+  };
+  const english = translations[content.units[0].source];
+  assert(english,'Unexpected source in translation fixture');
+  await paragraphGate.promise;
+  return JSON.stringify({translations:[{id:content.units[0].id,english}]});
+};
 if(reviewMode||auditMode)runtime.writing.evidence={retrieve:async()=>({sources:[],terms:[],warnings:[],local:'offline-probe',zotero:'offline-probe'})};
 if(auditMode)runtime.review.agent=async({childId,prompt,published})=>{
   const data=JSON.parse(prompt.split('\n').at(-1));
@@ -40,11 +59,13 @@ if(auditMode)runtime.review.agent=async({childId,prompt,published})=>{
 const require=createRequire(join(root,'_scratch/tmp/ui-deps/package.json')),esbuild=require('esbuild'),bundle=join(directory,'probe.js');
 esbuild.buildSync({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {WordEditor} from './src/client/WordEditor.jsx';import {NativeSentenceBody} from './src/client/entry.jsx';import {createApi} from './src/client/api.mjs';import base from './src/client/workbench.css';import revision from './src/client/revision-tools.css';import compact from './src/client/compact-layout.css';import refined from './src/client/refined-workbench.css';import glass from './src/client/glass-workbench.css';import {App} from './src/client/App.jsx';
 const api=createApi(),projectId=${JSON.stringify(projectId)},objectId=${JSON.stringify(objectId)};
-const mutateMeasured=api.mutate.bind(api);api.mutate=async(action,data)=>{const start=performance.now();try{return await mutateMeasured(action,data)}finally{window.pipeline?.push({stage:action,start,end:performance.now()})}};
+const mutateMeasured=api.mutate.bind(api);api.mutate=async(action,data,options)=>{const start=performance.now();try{return await mutateMeasured(action,data,options)}finally{window.pipeline?.push({stage:action,start,end:performance.now()})}};
 function Native(info){const[draft,setDraft]=React.useState('');return <div className="rw-native-sentence-frame" style={{height:'100%'}}><NativeSentenceBody sessionId=${JSON.stringify(sessionId)} jobId={info.job.id} autoSelectionDraft={info.autoSelectionDraft} reviewInstruction={info.reviewInstruction||info.job.reviewInstruction} selectedText={info.job.original} conversationOnly={info.job.conversationOnly||['adopted','undone'].includes(info.job.output?.review)} selectionPending={info.selectionPending} useSession={()=>({})} useConversation={()=>({})} useInput={()=>({draft,phase:'plain'})} useWorkspaces={()=>({items:[{sessionIds:[${JSON.stringify(sessionId)}]}]})} inputActions={{setDraft:text=>{window.pipeline?.push({stage:'draft',start:performance.now(),end:performance.now()});setDraft(text)},persistDraft(){},submit(){throw Error('The probe never submits a model request')}}} renderFactorySlot={()=><div data-conversation-content style={{height:'100%',display:'flex',flexDirection:'column'}}><div data-conversation-region="messages" style={{flex:1,overflow:'auto',paddingTop:24}}><small style={{color:'#617087'}}>合成对话 · 界面验证</small><div className="_bubble_1sgyj_1" style={{margin:'18px 0'}}>请帮我核对当前选句，保持术语和引用不变。</div><article className="_markdown_rve47_5"><p>已保留当前文稿上下文。你可以继续调整修改要求，在对照中编辑建议后采用。</p><p>字体、排版和空白清理也可以直接在这里提出。</p></article></div><div data-composer-card style={{margin:'12px 16px',padding:12}}><textarea data-composer-input aria-label="合成原生输入框" value={draft} onChange={e=>setDraft(e.target.value)} style={{width:'100%',minHeight:110,border:0,resize:'none'}}/><div style={{display:'flex',justifyContent:'space-between',color:'#617087',fontSize:11,marginTop:8}}><span>＋　合成测试 · 无模型调用</span><button disabled aria-label="合成发送按钮">↑</button></div></div></div>}/></div>}
 function Probe(){const[state,setState]=React.useState(null),[job,setJob]=React.useState(${JSON.stringify(jobId)});React.useEffect(()=>{let closed=false;const controller=new AbortController();window.publish=async()=>{const next=await api.bootstrap();if(!closed)setState(next);return next};void(async()=>{let next=await window.publish();while(!closed){const changed=await api.watchState(next.stamp,controller.signal);if(closed)return;if(changed.stamp!==next.stamp)next=await window.publish()}})().catch(()=>{});return()=>{closed=true;controller.abort()}},[]);if(!state)return null;const project=state.projects.find(p=>p.id===projectId),object=project.objects.find(o=>o.id===objectId);const mutate=async(action,data)=>{const next=await api.mutate(action,{projectId,...data});setState(next);return next};return <><style>{base+revision+compact+refined+glass}</style><div className="rw-app" style={{height:'100%'}}><WordEditor api={api} project={project} object={object} sentence={{jobs:project.jobs,initialNativeJobId:job,nativeRender:info=>React.createElement(Native,info),onNativePrepare:async({wordSelection})=>(await mutate('prepareSentenceSession',{objectId,expectedRevision:object.revision,wordSelection})).actionResult.jobId,onNativeOpen:async id=>{setJob(id)},onOpenConversation:async()=>(await mutate('openWritingConversation',{objectId})).actionResult.jobId,onAction:(action,jobId)=>mutate(action,{jobId}),onEditSuggestion:(jobId,data)=>mutate('editSentenceSuggestion',{jobId,...data})}} onSaved={setState} registerSave={()=>()=>{}} onDirty={()=>{}}/></div></>}createRoot(document.getElementById('root')).render(${workbenchMode?'<App api={api} nativeSentenceRender={info=>React.createElement(Native,info)}/>' : '<Probe/>'});`,resolveDir:root,loader:'jsx'},outfile:bundle,bundle:true,format:'esm',loader:{'.css':'text'},nodePaths:[join(root,'_scratch/tmp/ui-deps/node_modules'),join(root,'_scratch/tmp/editor-deps/node_modules')],logLevel:'silent'});
 let browser,ws,server;
 const serverTrace=[];
+let holdWordAsset;
+let latestBootstrapRevision;
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 try{
   server=createServer(async(incoming,outgoing)=>{try{
@@ -54,7 +75,15 @@ try{
     const serverStart=performance.now();let action;try{if(incoming.url.endsWith('/mutate'))action=JSON.parse(Buffer.concat(chunks).toString()).action}catch{}
     const response=await runtime.handle(new Request(`http://127.0.0.1:${server.address().port}${incoming.url}`,{method:incoming.method,headers:incoming.headers,...(chunks.length?{body:Buffer.concat(chunks)}:{})}));
     if(action)serverTrace.push({stage:action,ms:Math.round(performance.now()-serverStart)});
-    outgoing.writeHead(response.status,Object.fromEntries(response.headers));outgoing.end(Buffer.from(await response.arrayBuffer()));
+    const body=Buffer.from(await response.arrayBuffer());
+    if(syncMode&&incoming.url.endsWith('/state?summary=1')&&response.ok){
+      const state=JSON.parse(body.toString());
+      latestBootstrapRevision=state.projects.find(project=>project.id===projectId)?.objects.find(object=>object.id===objectId)?.revision;
+    }
+    if(holdWordAsset&&incoming.url.includes('/asset?')&&incoming.url.includes(`objectId=${objectId}`)){
+      const hold=holdWordAsset;holdWordAsset=null;hold.captured();await hold.release;
+    }
+    outgoing.writeHead(response.status,Object.fromEntries(response.headers));outgoing.end(body);
   }catch(error){outgoing.writeHead(500).end(error.message)}});
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   browser=spawn('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',['--headless=new','--remote-debugging-port=0',`--user-data-dir=${join(directory,'edge-profile')}`,'--use-angle=swiftshader','--enable-unsafe-swiftshader','--no-first-run',`http://127.0.0.1:${server.address().port}/probe`],{windowsHide:true,stdio:'ignore'});
@@ -68,7 +97,101 @@ try{
   assert(runtime.wordLive.editors.size,await evaluate('document.body.innerText'));
   const ui=await evaluate(`({formatPanel:!!document.querySelector('[aria-label="Word 格式修改"]'),frames:document.querySelectorAll('iframe').length,body:document.body.innerText})`);assert.equal(ui.formatPanel,false);assert.equal(ui.frames,1);
   const results=[];
-  if(auditMode){
+  if(directMode){
+    await runtime.nativeWriting.userTurn(sessionId,[{role:'user',content:[{type:'text',text:'直接替换九条测试参考文献。'}]}],{provider:'probe',model:'fixture'},1);
+    const service=runtime.wordLive;
+    const read=query=>service.context(sessionId,undefined,{query});
+    const apply=(ctx,replacements)=>service.edit(sessionId,{contextId:ctx.contextId,scope:'targets',action:'replace_text',reason:'合成参考文献验收',replacements});
+    let ctx=await read('合成文献');
+    const matches=ctx.search.matches;
+    assert.equal(matches.length,9);
+    const edits=matches.map(({path,segments})=>({path,before:segments[0],after:segments[0].replace('合成文献。','Synthetic reference.')}));
+    const revision=ctx.revision;
+    await assert.rejects(apply(ctx,[edits[0],{before:'找不到的原文。',after:'No change.'}]),/第 2 项/);
+    assert.equal(runtime.store.object(projectId,objectId).revision,revision);
+    ctx=await read('[12]');
+    await assert.rejects(apply(ctx,[{before:'合成文献。',after:'Ambiguous.'}]),/多次/);
+    ctx=await read('[44]');
+    const receipt=await apply(ctx,edits);
+    assert.equal(receipt.replaced,9);
+    assert.equal(receipt.revision,revision+1);
+    let shown='';
+    for(let tries=0;tries<160;tries++){
+      shown=await evaluate("(async()=>{try{return (await document.querySelector('iframe').contentWindow.wordcraft.execute('document.text',{})).text}catch{return ''}})()");
+      if(shown.includes('[44] Synthetic reference.'))break;
+      await pause(100);
+    }
+    assert(edits.every(edit=>shown.includes(edit.after)&&!shown.includes(edit.before)));
+    assert(shown.includes('标 题'));
+    const saved=await runtime.wordEditing.source(projectId,objectId);
+    await promisify(execFile)('python',['-I','-c',"import sys,zipfile; a,b=map(zipfile.ZipFile,sys.argv[1:]); assert a.namelist()==b.namelist(); assert all(a.read(n)==b.read(n) for n in a.namelist() if n!='word/document.xml'); assert a.read('word/document.xml').replace('合成文献。'.encode(),b'Synthetic reference.').replace(b'<w:t>[',b'<w:t xml:space=\"preserve\">[')==b.read('word/document.xml')",originalFile,saved.path],{windowsHide:true});
+    assert.deepEqual(await readFile(originalFile),original);
+    await runtime.nativeWriting.idle(sessionId);
+    assert.equal(runtime.nativeWriting.findSession(sessionId).phase,'对话正文修改已保存');
+    console.log(JSON.stringify({directChat:true,updated:receipt.replaced,revision:receipt.revision,liveWord:true,formatPreserved:true}));
+  }else if(translationMode){
+    const waitFor=async expression=>{
+      for(let i=0;i<250;i++){if(await evaluate(expression))return;await pause(80)}
+      assert.fail(await evaluate('document.body.innerText'));
+    };
+    const button=text=>`Array.from(document.querySelectorAll('button')).find(button=>button.textContent.trim()===${JSON.stringify(text)})`;
+    await waitFor(button('英文翻译')+'?.disabled===false');
+    await evaluate(button('英文翻译')+'.click()');
+    await waitFor(button('生成英文译文')+'?.disabled===false');
+    await evaluate(`(async()=>{const w=document.querySelector('iframe').contentWindow.wordcraft;const result=await w.execute('edit.find',{text:'合成方法采用两种计量口径。',special:false});const match=result.matches[0];await w.execute('select.range',{anchor:match.start,focus:match.end})})()`);
+    await evaluate(`(()=>{const select=document.querySelector('select[aria-label="翻译范围"]');select.value='selection';select.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+    await evaluate(button('生成英文译文')+'.click()');
+    await waitFor(`document.querySelector('.rw-translation-schedule > summary')?.textContent.includes('1 运行中')`);
+    await evaluate("document.querySelector('.rw-translation-schedule > summary').click()");
+    await waitFor("!!document.querySelector('.rw-dispatch-tree > details > summary')");
+    await evaluate("document.querySelector('.rw-dispatch-tree > details > summary').click();document.querySelector('.rw-dispatch-tree details details > summary').click()");
+    await waitFor(`document.querySelector('.rw-dispatch-tree li')?.innerText.includes('运行中 · 翻译初稿')`);
+    paragraphGate.resolve();
+    await waitFor(`document.querySelector('.rw-translation-schedule > summary')?.textContent.includes('已完成 4/4')`);
+    await evaluate("document.querySelector('.rw-translation-schedule > summary').click()");
+    await waitFor(`document.querySelector('.rw-translation-scroll')?.textContent.includes('The synthetic method uses two accounting definitions.')`);
+    assert.equal(runtime.store.object(projectId,objectId).revision,1);
+    await evaluate(button('编辑译文')+'.click()');
+    await waitFor(`!!document.querySelector('[aria-label="编辑英文译文"]')`);
+    await evaluate(`(()=>{const area=document.querySelector('[aria-label="编辑英文译文"]');Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value').set.call(area,'The synthetic method applies two accounting definitions.');area.dispatchEvent(new Event('input',{bubbles:true}))})()`);
+    await evaluate(button('保存译文')+'.click()');
+    await waitFor(`!document.querySelector('[aria-label="编辑英文译文"]')&&${button('采用选区译文')}?.disabled===false&&document.querySelector('.rw-translation-scroll')?.textContent.includes('The synthetic method applies two accounting definitions.')`);
+    await evaluate(button('采用选区译文')+'.click()');
+    await waitFor(button('打开英文 Word')+'?.disabled===false');
+    const state=runtime.translation.status({projectId,objectId});
+    assert.match(await runtime.wordEditing.context(projectId,state.target.id),/The synthetic method applies two accounting definitions/);
+    assert.deepEqual(await readFile(originalFile),original);
+    const screenshot=await call('Page.captureScreenshot',{format:'png'});
+    await writeFile(join(directory,'translation.png'),Buffer.from(screenshot.data,'base64'));
+    const selectText = text => `(async()=>{const w=document.querySelector('iframe').contentWindow.wordcraft;const {matches}=await w.execute('edit.find',{text:${JSON.stringify(text)},special:false});const m=matches[0];if(!m)throw Error('Text missing from the open Word document');await w.execute('select.range',{anchor:m.start,focus:m.end})})()`;
+    const replaceSelection = text => `document.querySelector('iframe').contentWindow.wordcraft.execute('text.insert',{text:${JSON.stringify(text)},raw:true})`;
+    await evaluate(selectText('合成方法采用两种计量口径。'));
+    await evaluate(replaceSelection('合成方法采用三种计量口径。'));
+    await evaluate(selectText('合成方法采用三种计量口径。'));
+    await evaluate(button('新建翻译')+'.click()');
+    await waitFor(button('生成英文译文')+'?.disabled===false');
+    await evaluate(button('生成英文译文')+'.click()');
+    await waitFor(`document.querySelector('.rw-translation-scroll')?.textContent.includes('The synthetic method uses three accounting definitions.') && ${button('采用选区译文')}?.disabled===false`);
+    const revised = runtime.translation.status({projectId,objectId});
+    assert.notEqual(revised.id,state.id);
+    assert(revised.sourceRevision > state.sourceRevision);
+    assert.equal(runtime.translation.status({projectId,objectId,jobId:state.id}).stale,true);
+    assert.equal(revised.schedule.parts[0].sections[0].paragraphs[0].state,'done');
+    await evaluate(button('采用选区译文')+'.click()');
+    await waitFor(button('打开英文 Word')+'?.disabled===false');
+    const updated = runtime.translation.status({projectId,objectId}).target;
+    assert.notEqual(updated.id,state.target.id);
+    await evaluate(button('打开英文 Word')+'.click()');
+    await waitFor(`document.querySelector('.rw-word-document-title strong')?.textContent===${JSON.stringify(updated.title)} && !document.querySelector('.rw-word-loading')`);
+    await evaluate(selectText('The synthetic method uses three accounting definitions.'));
+    await evaluate(replaceSelection('The synthetic method applies three accounting definitions.'));
+    await evaluate("document.querySelector('iframe').contentWindow.wordcraft.execute('file.save',{})");
+    for(let tries=0;tries<150 && runtime.store.object(projectId,updated.id).revision===updated.revision;tries++)await pause(80);
+    assert.match(await runtime.wordEditing.context(projectId,updated.id),/applies three accounting definitions/);
+    assert.match(await runtime.wordEditing.context(projectId,state.target.id),/applies two accounting definitions/);
+    assert.deepEqual(await readFile(originalFile),original);
+    console.log(JSON.stringify({directory,translation:true,realWordcraftWasm:true,selectedWordRange:true,editedAndAdopted:true,independentEnglishWord:true,retranslatedSavedChange:true,editedEnglishWord:true}));
+  }else if(auditMode){
     const waitFor=async expression=>{
       for(let i=0;i<250;i++){if(await evaluate(expression))return;await pause(80)}
       assert.fail(await evaluate('document.body.innerText'));
@@ -83,10 +206,14 @@ try{
     assert.equal(await evaluate(picker+'.value'),'overview');
     assert.equal(await evaluate(picker+'.options.length'),7);
     const choose=id=>evaluate(`(()=>{const select=${picker};select.value=${JSON.stringify(id)};select.dispatchEvent(new Event('change',{bubbles:true}))})()`);
-    await choose('methods');
     await evaluate(`document.querySelector('[aria-label="审阅重点"] .rw-word-module-preview-toggle').click()`);
-    assert(await evaluate(`document.querySelector('[aria-label="审阅重点"] .rw-word-template-preview:not([hidden])').textContent.includes('预处理')`));
-    assert.equal(await evaluate(composer+'.value'),'');
+    const templatePreview=`document.querySelector('[aria-label="审阅重点"] .rw-word-template-preview:not([hidden])')`;
+    for(const {id,prompt} of MANUSCRIPT_REVIEW_TEMPLATES){
+      await choose(id);
+      assert.equal(await evaluate(templatePreview+'.textContent'),prompt);
+      assert.equal(await evaluate(composer+'.value'),'');
+    }
+    await choose('methods');
     await evaluate(button('填入模板')+'.click()');
     assert((await evaluate(composer+'.value')).includes('预处理'));
     assert.equal(runtime.review.history({projectId,objectId}).length,0);
@@ -97,10 +224,11 @@ try{
     await evaluate(button('追加模板')+'.click()');
     assert((await evaluate(composer+'.value')).startsWith('请额外核对合成稿的单位。\n\n'));
     assert(await evaluate(button('已填入')+'.disabled'));
+    const expectedInstruction=await evaluate(composer+'.value');
     await evaluate(button('开始全文审阅')+'.click()');
     await waitFor(button('写入 2 条 Word 批注')+'?.disabled===false');
     const submitted=runtime.review.status({projectId,objectId}).instruction;
-    assert(submitted.startsWith('请额外核对合成稿的单位。')&&submitted.includes('比较基准'));
+    assert.equal(submitted,expectedInstruction,'submission preserves the complete expanded review prompt');
     await evaluate(`(()=>{const api=document.querySelector('iframe').contentWindow.wordcraft;const execute=api.execute.bind(api);window.commentPaneResults=[];api.execute=async(name,...args)=>{const result=await execute(name,...args);if(name==='view.commentsPane')window.commentPaneResults.push(result.value);return result}})()`);
     if(syncMode){
       await evaluate(`(async()=>{const frame=document.querySelector('iframe'),w=frame.contentWindow.wordcraft;window.originalWordFrame=frame;await w.execute('review.trackChanges',{});const point={story:'body',path:[3],off:0};await w.execute('select.range',{anchor:point,focus:point});await w.execute('text.insert',{text:'实时合成编辑。',raw:true})})()`);
@@ -110,8 +238,29 @@ try{
       await waitFor(`(async()=>{const frame=document.querySelector('iframe');if(frame!==window.originalWordFrame||document.querySelector('.rw-word-loading'))return false;const w=frame.contentWindow.wordcraft,{comments,trackChanges}=await w.execute('document.inspect',{text:true});const {text}=await w.execute('document.text',{});return comments===3&&trackChanges&&text.includes('实时合成编辑。')&&window.commentPaneResults.at(-1)===true})()`);
       assert.equal(runtime.store.object(projectId,objectId).revision,3);
       assert.match(await runtime.wordEditing.context(projectId,objectId),/实时合成编辑。/);
+      const saveFromAnotherView=async (before,after,revision)=>{
+        const {path}=await runtime.wordEditing.source(projectId,objectId);
+        const point={story:'body',path:[7],off:0};
+        const output=join(directory,`sync-${revision}.docx`);
+        const selection={anchor:point,focus:{...point,off:Buffer.byteLength(before)},text:before};
+        await runtime.wordEditing.inspect({path,selection,replacement:after,output});
+        await runtime.wordEditing.save({projectId,objectId,expectedRevision:revision,bytes:await readFile(output)});
+      };
+      const firstResponse=Promise.withResolvers(),gate=Promise.withResolvers();
+      holdWordAsset={captured:firstResponse.resolve,release:gate.promise};
+      try {
+        await saveFromAnotherView('结果段落报告对应区间。','第一次同步的合成正文。',3);
+        const timeout=AbortSignal.timeout(12000);
+        await Promise.race([firstResponse.promise,new Promise((_,reject)=>timeout.addEventListener('abort',()=>reject(Error('The first Word download did not start')),{once:true}))]);
+        await saveFromAnotherView('第一次同步的合成正文。','第二次同步的合成正文。',4);
+        for(let attempt=0;attempt<100&&latestBootstrapRevision!==5;attempt++)await pause(50);
+        assert.equal(latestBootstrapRevision,5,'the workbench received the second save while Word was still opening the first');
+        await pause(200);
+      } finally { gate.resolve(); }
+      await waitFor(`(async()=>{const frame=document.querySelector('iframe');if(frame!==window.originalWordFrame||frame.inert||document.querySelector('.rw-word-loading'))return false;const {text}=await frame.contentWindow.wordcraft.execute('document.text',{});return text.includes('第二次同步的合成正文。')&&!text.includes('第一次同步的合成正文。')})()`);
+      assert.equal(runtime.store.object(projectId,objectId).revision,5,'synchronizing the canvas must not save another DOCX');
       assert.deepEqual(await readFile(originalFile),original);
-      console.log(JSON.stringify({realTime:true,dirtyDraftMerged:true,trackerPreserved:true,commentsVisible:true,sameIframe:true}));
+      console.log(JSON.stringify({realTime:true,dirtyDraftMerged:true,trackerPreserved:true,commentsVisible:true,sameIframe:true,successiveSavesVisible:true}));
     }else{
     await evaluate(button('写入 2 条 Word 批注')+'.click()');
     await waitFor(`document.body.innerText.includes('全文审阅意见')&&!document.querySelector('.rw-word-loading')`);
@@ -136,6 +285,14 @@ try{
     const saved=await runtime.wordEditing.source(projectId,objectId);
     assert.equal((await runtime.wordEditing.inspect({path:saved.path,selection:{...selected,coordinate:'wordcraft'}})).selectedText,'合成方法采用两种计量口径。');
     if(batchMode){
+      const word=`document.querySelector('iframe').contentWindow.wordcraft`;
+      const wordSelection=`${word}.execute('document.selection',{})`;
+      const selectedText=text=>`(async()=>((await ${wordSelection}).text===${JSON.stringify(text)}))()`;
+      const firstPageTop=`(async()=>(await ${word}.uiInspect({})).pages[0][1])()`;
+      const pageAtMethods=await evaluate(firstPageTop);
+      await evaluate(`${word}.execute('select.range',{anchor:{story:'body',path:[6],off:0},focus:{story:'body',path:[6],off:0}})`);
+      await waitFor(`${firstPageTop}.then(top=>top<${pageAtMethods}-100)`);
+      const pageAtResults=await evaluate(firstPageTop);
       assert.equal(await evaluate(nativeCommentResolved('1-1')),false);
       await waitFor(button('全选待处理')+'?.disabled===false');
       await evaluate(button('全选待处理')+'.click()');
@@ -145,6 +302,20 @@ try{
       assert.equal(runtime.store.object(projectId,objectId).revision,2,'generation awaits individual review');
       const reviewPicker=`document.querySelector('[aria-label="选择要审核的修改"]')`;
       assert.equal(await evaluate(reviewPicker+'.value'),'1-1');
+      await waitFor(selectedText('合成方法采用两种计量口径。'));
+      await waitFor(`${firstPageTop}.then(top=>top>${pageAtResults}+100)`);
+      const findingDisclosure=button('审阅意见');
+      const findingPanel=`document.getElementById(${findingDisclosure}.getAttribute('aria-controls'))`;
+      const comparisonBody=`document.querySelector('.rw-review-batch-comparison .rw-sentence-body')`;
+      assert.equal(await evaluate(`${findingDisclosure}.getAttribute('aria-expanded')`),'false');
+      assert.equal(await evaluate(`${findingPanel}.getBoundingClientRect().height`),0);
+      const collapsedHeight=await evaluate(`${comparisonBody}.clientHeight`);
+      await evaluate(findingDisclosure+'.click()');
+      assert.equal(await evaluate(`${findingDisclosure}.getAttribute('aria-expanded')`),'true');
+      assert.match(await evaluate(`${findingPanel}.innerText`),/口径需解释/);
+      assert(await evaluate(`${comparisonBody}.clientHeight`)<collapsedHeight);
+      await evaluate(findingDisclosure+'.click()');
+      assert.equal(await evaluate(`${comparisonBody}.clientHeight`),collapsedHeight,'folding the finding restores comparison space');
       const editFirst=`document.querySelector('[aria-label="编辑第 1 段建议"]')`;
       await waitFor(`${editFirst}?.disabled===false`);
       await evaluate(editFirst+'.click()');
@@ -178,6 +349,11 @@ try{
       await evaluate(button('下一条待审核')+'.click()');
       await waitFor(button('采用这条修改')+'?.disabled===false');
       assert.equal(await evaluate(reviewPicker+'.value'),'2-1');
+      await waitFor(selectedText('结果沿用合成方法的计量口径。'));
+      await waitFor(`${firstPageTop}.then(top=>top<${pageAtResults}+100)`);
+      await evaluate(findingDisclosure+'.click()');
+      assert.match(await evaluate(`${findingPanel}.innerText`),/建议先核对 1 条关联修改/);
+      await evaluate(findingDisclosure+'.click()');
       await evaluate(`document.querySelector('[aria-label="编辑第 1 句建议"]').click()`);
       const sentenceInput=`document.querySelector('[aria-label="第 1 句改后文字"]')`;
       await typeEdit(sentenceInput,'结果沿用合成方法的计量口径，已由作者核对。');
@@ -195,6 +371,11 @@ try{
       await evaluate(button('查看批量对照')+'.click()');
       await waitFor(`${reviewPicker}?.value==='2-1'`);
       await waitFor(button('撤回本次采用')+'?.disabled===false');
+      await evaluate(`document.querySelector('.rw-review-batch-pager [aria-label="上一条"]').click()`);
+      await waitFor(`(async()=>${reviewPicker}.value==='1-1'&&(await ${wordSelection}).focus.path[0]===2)()`);
+      await evaluate(`document.querySelector('.rw-review-batch-pager [aria-label="下一条"]').click()`);
+      await waitFor(`(async()=>${reviewPicker}.value==='2-1'&&(await ${wordSelection}).focus.path[0]===6)()`);
+      await waitFor(button('撤回本次采用')+'?.disabled===false');
       await evaluate(button('撤回本次采用')+'.click()');
       await waitFor(`document.querySelector('.rw-review-batch-progress')?.textContent.includes('1/2')&&${button('返回审阅')}?.disabled===false`);
       assert.equal(runtime.store.object(projectId,objectId).revision,5);
@@ -202,8 +383,15 @@ try{
       assert.equal(await evaluate(nativeCommentResolved('1-1')),true);
       await evaluate(button('返回审阅')+'.click()');
       await waitFor(`${findingState('1-1','adopted')}==='已解决'&&${findingState('2-1','undone')}==='待处理'`);
+      await evaluate(button('查看批量对照')+'.click()');
+      await waitFor(`(async()=>${reviewPicker}?.value==='2-1'&&(await ${wordSelection}).focus.path[0]===6)()`);
+      await evaluate(`(async()=>{const engine=${word};const point={story:'body',path:[7],off:0};await engine.execute('select.range',{anchor:point,focus:point});await engine.execute('text.insert',{text:'未保存的合成编辑。',raw:true})})()`);
+      await evaluate(`(()=>{const select=${reviewPicker};select.value='1-1';select.dispatchEvent(new Event('change',{bubbles:true}))})()`);
+      await waitFor(`(async()=>${reviewPicker}.value==='1-1'&&(await ${wordSelection}).focus.path[0]===2)()`);
+      assert.equal(runtime.store.object(projectId,objectId).revision,5,'following an item must not save unsaved Word edits');
+      assert.match(await evaluate(`(async()=>(await ${word}.execute('document.text',{})).text)()`),/未保存的合成编辑。/);
       assert.deepEqual(await readFile(originalFile),original);
-      console.log(JSON.stringify({manuscriptBatch:true,realWordcraftWasm:true,individualApprovals:2,editedOneDraft:true,sameDocument:true,adoptionMs,reviewResolved:true,nativeWordCommentResolved:true,undoRestoresPending:true,commentsPreserved:true,queueSelectionPreserved:true,originalPreserved:true}));
+      console.log(JSON.stringify({manuscriptBatch:true,realWordcraftWasm:true,individualApprovals:2,editedOneDraft:true,sameDocument:true,adoptionMs,reviewResolved:true,nativeWordCommentResolved:true,undoRestoresPending:true,commentsPreserved:true,queueSelectionPreserved:true,followedAcrossPages:true,unsavedEditsPreserved:true,originalPreserved:true}));
     }else{
     await waitFor(button('准备小节修改')+'?.disabled===false');
     await evaluate(button('准备小节修改')+'.click()');

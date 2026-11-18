@@ -13,7 +13,7 @@ export function WordConversationDocument({ project, object, sessionId }) {
   </div>;
 }
 
-export function WordRevisionScope({ mode, disabled, canUseSelection, feedback, text, connecting, onModeChange, onUseSelection, onRetry }) {
+export function WordRevisionScope({ mode, disabled, canUseSelection, feedback, text, connecting, onModeChange, onUseSelection, onRetry, onTranslate }) {
   const id = React.useId();
   const chapter = mode === 'chapter';
   const state = feedback?.state;
@@ -27,7 +27,10 @@ export function WordRevisionScope({ mode, disabled, canUseSelection, feedback, t
   return <section className="rw-word-module rw-word-scope" aria-labelledby={id}>
     <div className="rw-word-module-head">
       <h3 id={id}><Icon name="settings" size={14}/>修改范围</h3>
-      {chapter && <button type="button" className="rw-word-module-action" disabled={!canUseSelection} onClick={onUseSelection}>使用 Word 选区</button>}
+      <div className="rw-word-template-controls">
+        {chapter && <button type="button" className="rw-word-module-action" disabled={!canUseSelection} onClick={onUseSelection}>使用 Word 选区</button>}
+        {onTranslate && <button type="button" className="rw-word-module-action" disabled={disabled} onClick={onTranslate}>英文翻译</button>}
+      </div>
     </div>
     <div className="rw-word-scope-options" role="radiogroup" aria-labelledby={id}>
       {[['sentence', '自然段精修'], ['chapter', '章节优化']].map(([value, name]) =>

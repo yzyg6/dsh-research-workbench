@@ -160,7 +160,7 @@ export class ProjectStore {
         taskStates,
         bindings: Object.fromEntries(this.db.prepare('SELECT * FROM bindings WHERE project_id=?').all(row.id).map((binding) => [binding.task, binding.session_id])),
         dependencies: this.db.prepare('SELECT * FROM dependencies WHERE project_id=?').all(row.id).map((edge) => ({ id: edge.id, sourceId: edge.source_id, targetId: edge.target_id, sourceRevision: edge.source_revision, kind: edge.kind })),
-        jobs: this.db.prepare("SELECT * FROM jobs WHERE project_id=? AND (id IN (SELECT id FROM jobs WHERE project_id=? AND type<>'writing.review' AND (operation_key NOT LIKE 'review-draft:%' OR json_extract(output,'$.review') IN ('adopted','undone')) ORDER BY created_at DESC LIMIT 50) OR id IN (SELECT json_extract(CASE WHEN json_valid(value) THEN value ELSE '{}' END,'$.jobId') FROM preferences WHERE key=? OR key LIKE ? OR key LIKE ?) OR id=(SELECT json_extract(value,'$.sentenceJobId') FROM task_states WHERE project_id=? AND task='writing')) ORDER BY created_at DESC").all(row.id,row.id,`sentenceThread:${row.id}`,`sentenceThread:${row.id}:%`,`formatThread:${row.id}:%`,row.id).map((job) => this.publicJob(job)) });
+        jobs: this.db.prepare("SELECT * FROM jobs WHERE project_id=? AND (id IN (SELECT id FROM jobs WHERE project_id=? AND type NOT IN ('writing.review','word.translation') AND (operation_key NOT LIKE 'review-draft:%' OR json_extract(output,'$.review') IN ('adopted','undone')) ORDER BY created_at DESC LIMIT 50) OR id IN (SELECT json_extract(CASE WHEN json_valid(value) THEN value ELSE '{}' END,'$.jobId') FROM preferences WHERE key=? OR key LIKE ? OR key LIKE ?) OR id=(SELECT json_extract(value,'$.sentenceJobId') FROM task_states WHERE project_id=? AND task='writing')) ORDER BY created_at DESC").all(row.id,row.id,`sentenceThread:${row.id}`,`sentenceThread:${row.id}:%`,`formatThread:${row.id}:%`,row.id).map((job) => this.publicJob(job)) });
     }
     return { schemaVersion: 1, defaultProjectDirectory: join(this.root, 'projects'), activeProjectId: projects.some((p) => p.id === active) ? active : projects[0]?.id || null, projects };
   }
@@ -375,7 +375,7 @@ export class ProjectStore {
   async asset(projectId, objectId) {
     const row = this.object(projectId, objectId), bytes = await this.bytesFor(row);
     assert(hash(bytes) === row.sha256, 'CONTENT_CHANGED', '资源已在工作台外发生变化，原采用版本未被替换。', 409);
-    return { bytes, contentType: parse(row.metadata).mimeType || (row.encoding === 'binary' ? row.kind === 'figure' ? 'image/png' : 'application/octet-stream' : 'text/plain; charset=utf-8'), sha256: row.sha256 };
+    return { bytes, contentType: parse(row.metadata).mimeType || (row.encoding === 'binary' ? row.kind === 'figure' ? 'image/png' : 'application/octet-stream' : 'text/plain; charset=utf-8'), sha256: row.sha256, revision: row.revision };
   }
   async createDemo({ directory } = {}) {
     const projectId = await this.createProject({ title: '分组干预与时序响应', question: '不同分组的响应指标如何随时间变化，哪些描述能够由现有数据与图表支持？', journal: '目标期刊待定', language: 'zh', isDemo: true, directory });

@@ -1,8 +1,10 @@
+import { stripAgentEnvelope as stripReviewEnvelope, structuredAgentReply as reviewReplyJSON } from './agent-text.mjs';
 import { randomUUID } from 'node:crypto';
 import { readFile, unlink } from 'node:fs/promises';
 import { isDeepStrictEqual } from 'node:util';
 import { StoreError } from './store.mjs';
 import { REVIEW_DEGREES, REVIEW_RELATION_LABELS } from '../shared/review-relations.mjs';
+import { MANUSCRIPT_REVIEW_GUIDANCE, MANUSCRIPT_REVIEW_TEMPLATES, MANUSCRIPT_REVISION_GUIDANCE } from '../shared/revision-review.mjs';
 import { validateProposal } from './writing.mjs';
 import { citationMarkers } from './citation-markers.mjs';
 import { reviewWordRange } from './review-word-range.mjs';
@@ -11,63 +13,85 @@ const TYPE = 'writing.review';
 const now = () => new Date().toISOString();
 const check = (value, code, message, status = 400) => { if (!value) throw new StoreError(code, message, status); };
 const active = status => ['queued', 'running'].includes(status);
-const format = '仅返回 JSON 对象。summary 为本小节判断。findings 数组最多 3 项，字段为 index（分派小节中 anchorable 为 true 的段落数字 ID）、quote（同段连续原文，最多 180 字）、issue（问题与影响）、suggestion（建议）、steps（按顺序列出的修改步骤，使用字符串数组）、prompt（可直接使用的中文修改提示词）、scope（paragraph 或 chapter）、links（相关小节数字 ID 数组）。若无可靠问题，findings 返回空数组。';
-const instruction = '根据科学论文实际表述检查证据与结论是否匹配，识别术语、定义、数值、单位、方法与结果的衔接。保留不确定性和引用，不生成替换正文，不推断稿件未说明的结果或出处。';
+const format = '直接返回合法 JSON 对象，字符串中的引号和换行须按 JSON 规则转义，quote 中的原文字符须逐字保留。summary 概括本小节已经成立的工作、最有用的现有证据及其位置，并说明最值得加强的表达。findings 数组最多 3 项，按增强稿件的价值排序，字段为 index（分派小节中 anchorable 为 true 的段落数字 ID）、quote（同段连续原文，最多 180 字）、issue（当前表述影响读者理解之处）、suggestion（可采用的措辞或可执行的结构、证据改法）、steps（按顺序列出的修改步骤，使用字符串数组）、prompt（可直接使用的中文修改提示词，传入具体依据及应保留的条件）、scope（paragraph 或 chapter）、links（真正相关的小节数字 ID 数组）。已有表达足够时，findings 返回空数组。';
 const reviewClassification = '每条另附 reason（说明为何值得改、会影响什么）和 kind（wording 仅措辞，structure 调整信息顺序或章节衔接，meaning 涉及事实、统计口径、方法、结论范围或证据强度）。';
 const shape = (value, max) => typeof value === 'string' ? value.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]/g, '').trim().slice(0, max).toWellFormed() : '';
 const anchorError = '智能体没有返回可核对的原文锚点，可重试该小节。';
-const detailError = '已找到原文，但审阅意见缺少建议、修改步骤或提示词，可重试该小节。';
+const detailError = '已找到原文，但审阅意见缺少问题说明或可用的改法，可重试该小节。';
 const responseError = '智能体未返回完整的审阅意见，可继续重试。';
-const BATCH_PROMPT = '作者已选中一条审阅建议。延续本小节审阅，只为 original 内的正文返回拟议修改。结合前后文和审阅材料中的已确认事实，保持术语和计量口径一致。citationMarkers 按原段落列出允许保留的引用标记，重复次数和字符必须与原文一致，引用留在它支持的论断附近。审阅意见与周边段落里的引用仅供理解，禁止复制进改稿。需要核实、增删或替换的引用写进 warnings，先完成能够安全起草的改动。禁止补造证据、数字或结论。只返回一个 JSON 对象，包含 reason（解释修改理由）、warnings（待核对事项的字符串数组）、evidenceIds（空数组）。段落任务返回 replacement（单段文字），小节任务返回 paragraphs（与原文一一对应，段落数量相同）。';
+const SECTION_REPAIR = {
+  REVIEW_RESPONSE_INVALID: '上一轮回复未通过 JSON 或字段格式校验。保留已有审阅内容，重新返回一个完整合法的 JSON 对象。检查引号、换行、逗号及必需字段。',
+  REVIEW_ANCHOR_INVALID: '上一轮意见未能定位到原文。回到本节给出的段落，填写匹配的数字 index，并逐字摘录同一段落中连续的 quote。',
+  REVIEW_DETAILS_INVALID: '上一轮意见的修改内容不完整。为有依据的每条发现填全 issue、suggestion 和 steps，再给出相应的改稿提示词。',
+  REVIEW_AGENT_INCOMPLETE: '上一轮回复中途结束。请根据分派的稿件材料重新返回完整的审阅结果。',
+};
+const CONCISE_SECTION_REPLY = [
+  '本次改用简短纯文本回执。每行字段用实际制表符分隔，字段内用单行文字，原文引号可以直接保留。',
+  'SUMMARY\t本节简短小结',
+  'FINDING\t段落数字 ID\t连续原文\t问题说明\t具体修改建议',
+  '首行必须是 SUMMARY，随后最多三行 FINDING。已有表达足够时仅写 SUMMARY 行。',
+].join('\n');
+const BATCH_PROMPT = [
+  MANUSCRIPT_REVISION_GUIDANCE,
+  '作者已选中一条审阅建议。结合 authorRequest、实际原文和可见的上下文，只改写 original 内的正文，给出可直接对照采用的成稿。审阅意见、汇总和其他智能体的判断作为定位线索，新增事实须能回到可见原始材料。按 finding.path 判断目标章节的职责，只补入符合该章节职责的信息，保留原文的独立信息和主要结论。',
+  '按 citationMarkers 保留每个原段落中的引用字符和出现次数，让引用仍靠近它支持的论断。需要新增或替换的引文放入 warnings，并完成可以采用的正文。',
+  '仅返回 JSON 对象，包含 reason（说明改清楚了什么，补入内容须写明来源）、warnings（确需确认的事项，无则为空数组）、evidenceIds（空数组）。段落任务返回 replacement（单段文字），小节任务返回 paragraphs（与原文一一对应，段落数量相同）。',
+].join('\n');
 const BATCH_REPAIR = { CITATION_CHANGED: '上一稿的引用清单与原文不一致。逐项核对 citationMarkers，保留每一处原有标记及其重复次数，去掉从正文之外带入的引用。', INVALID_PROPOSAL: '上一轮改稿的内容或 JSON 格式未通过校验。请按字段要求完整返回一份改稿。', UNSUPPORTED_EVIDENCE: '上一次填入了未验证的证据编号。evidenceIds 应为空数组。' };
 const formatSteps = steps => shape(Array.isArray(steps)
   ? steps.slice(0, 12).map(step => shape(step, 900)).filter(Boolean).join('\n')
   : steps, 900);
 
-export function stripReviewEnvelope(text) {
-  // Some DSH continuation turns echo the leading ACP metadata block.
-  return text.trim().replace(/^<acp(?:\s+[^<>]{1,256})?>[^<>]{0,256}<\/acp>\s*(?=\{|\x60{3})/, '');
-}
-
-function batchReplyJSON(text) {
-  const reply = text.trim()
-    .replace(/^<acp(?:\s+[^<>]{1,256})?>[^<>]{0,256}<\/acp>\s*/, '')
-    .replace(/\s*<acp(?:\s+[^<>]{1,256})?>[^<>]{0,256}<\/acp>$/, '').trim();
-  const wrapped = reply.match(/^\x60{3}(?:json)?\s*([\s\S]*?)\s*\x60{3}$/i);
-  if (wrapped) return wrapped[1];
-  const fences = [...reply.matchAll(/^\s*\x60{3}(?:json)?[\t ]*\r?\n([\s\S]*?)\r?\n[\t ]*\x60{3}[\t ]*$/gim)];
-  if (fences.length === 1 && !reply.startsWith('{')) return fences[0][1].trim();
-  const start = reply.indexOf('{');
-  if (start > 0 && start <= 300 && reply.endsWith('}') && fences.length === 0) return reply.slice(start);
-  return reply;
-}
+export { stripReviewEnvelope };
 
 function decode(text) {
   try {
-    const value = JSON.parse(stripReviewEnvelope(text).replace(/^\x60{3}(?:json)?\s*([\s\S]*?)\s*\x60{3}$/i, '$1'));
+    const value = JSON.parse(reviewReplyJSON(text));
     if (value && typeof value === 'object' && !Array.isArray(value)) return value;
   } catch { /* The completed sections remain available for retry. */ }
   throw new StoreError('REVIEW_RESPONSE_INVALID', responseError, 502);
 }
 
+function decodeSection(text) {
+  const reply = stripReviewEnvelope(text);
+  const plain = reply.replace(/^\x60{3}(?:text|tsv)?[\t ]*\r?\n([\s\S]*?)\r?\n[\t ]*\x60{3}$/i, '$1');
+  if (!plain.startsWith('SUMMARY\t')) return decode(text);
+  const [heading, ...rows] = plain.split(/\r?\n/).filter(line => line.trim());
+  check(rows.length <= 3, 'REVIEW_RESPONSE_INVALID', responseError, 502);
+  const findings = rows.map(row => {
+    const [label, index, quote, issue, suggestion, ...extra] = row.split('\t');
+    check(label === 'FINDING' && /^\d+$/.test(index) && Number.isSafeInteger(Number(index))
+      && quote && issue && suggestion && !extra.length, 'REVIEW_RESPONSE_INVALID', responseError, 502);
+    return { index: Number(index), quote, issue, suggestion };
+  });
+  return { summary: heading.slice('SUMMARY\t'.length), findings };
+}
+
 function sectionResult(text, section, exact, outline) {
-  const result = decode(text), summary = shape(result.summary, 850);
+  const result = decodeSection(text), summary = shape(result.summary, 850);
   check(summary && Array.isArray(result.findings), 'REVIEW_RESPONSE_INVALID', '小节审阅意见不完整，可继续重试。', 502);
   const findings = [];
   let hasAnchor = false;
   for (const value of result.findings.slice(0, 3)) {
     const quote = shape(value?.quote, 180);
-    if (!section.paragraphs.some(p => p.anchorable && p.index === value?.index) || !quote || !exact[value.index]?.includes(quote)) continue;
+    if (!quote) continue;
+    const matches = section.paragraphs.filter(p => p.anchorable && exact[p.index]?.includes(quote));
+    const anchor = matches.find(p => p.index === value.index) || (matches.length === 1 ? matches[0] : null);
+    if (!anchor) continue;
     hasAnchor = true;
-    const item = {
-      index: value.index, quote, issue: shape(value.issue, 650), suggestion: shape(value.suggestion, 700),
-      steps: formatSteps(value.steps), prompt: shape(value.prompt, 1500),
-      reason: shape(value.reason, 650),
+    const reason = shape(value.reason, 650);
+    const issue = shape(value.issue, 650) || reason;
+    const givenSteps = formatSteps(value.steps);
+    const suggestion = shape(value.suggestion, 700) || shape(givenSteps, 700);
+    if (!issue || !suggestion) continue;
+    const steps = givenSteps || suggestion;
+    findings.push({
+      index: anchor.index, quote, issue, suggestion, steps, reason,
+      prompt: shape(value.prompt, 1500) || shape([...new Set([suggestion, steps])].join('\n'), 1500),
       ...(Object.hasOwn(REVIEW_DEGREES, value.kind) ? { kind: value.kind } : {}),
       scope: value.scope === 'chapter' ? 'chapter' : 'paragraph',
       links: [...new Set(Array.isArray(value.links) ? value.links : [])].filter(id => id !== section.id && outline.some(part => part.id === id)).slice(0, 8),
-    };
-    if (item.issue && item.suggestion && item.steps && item.prompt) findings.push(item);
+    });
   }
   if (result.findings.length) {
     check(hasAnchor, 'REVIEW_ANCHOR_INVALID', anchorError, 502);
@@ -163,7 +187,7 @@ export class ManuscriptReview {
     const project = this.store.project(projectId), id = 'j_' + randomUUID(), key = 'review:' + operationKey;
     const input = {
       objectId, parentId, expectedRevision, sha256: row.sha256, question: project.question, language: project.language,
-      instruction: shape(instruction, 3000) || '审查各小节的论证、证据和前后衔接。',
+      instruction: shape(instruction, 3000) || MANUSCRIPT_REVIEW_TEMPLATES[0].prompt,
       sections: sections.map((section, index) => ({ ...section, id: index + 1 })), paragraphs,
     };
     const output = { stage: 'reading', workers: input.sections.map(({ id }) => ({ id, status: 'waiting' })), messages: [], decisions: {} };
@@ -301,6 +325,7 @@ export class ManuscriptReview {
         const existing = items.find(item => item.findingId === findingId);
         const item = { findingId, state: 'queued', scope: scope === 'paragraph' && retry ? 'paragraph' : existing?.scope || findings.get(findingId).scope };
         if (existing) {
+          if (existing.scopeAdjusted) item.scopeAdjusted = true;
           if (existing.jobId) this.setBatchDraftReview(owner, existing.jobId, 'superseded');
           items[items.indexOf(existing)] = item;
           delete output.decisions[findingId];
@@ -341,19 +366,32 @@ export class ManuscriptReview {
           });
           try {
             check(worker?.childId, 'REVIEW_AGENT_UNAVAILABLE', '原小节子智能体的会话不可用。', 409);
-            const chapter = item.scope === 'chapter';
-            const target = reviewWordRange(outline, { ...finding, scope: item.scope, original: input.paragraphs[finding.index],
-              exactRevision: [input.expectedRevision, output.commentRevision].includes(row.revision), useCurrent: true });
-            const parsed = await this.word.inspect({ path, ...(chapter ? { chapterSelection: target.wordSelection } : { selection: target.wordSelection }) });
+            const inspectTarget = async scope => {
+              const target = reviewWordRange(outline, { ...finding, scope, original: input.paragraphs[finding.index],
+                exactRevision: [input.expectedRevision, output.commentRevision].includes(row.revision), useCurrent: true });
+              const parsed = await this.word.inspect({ path, [scope === 'chapter' ? 'chapterSelection' : 'selection']: target.wordSelection });
+              return { target, parsed };
+            };
+            let scope = item.scope;
+            let prepared;
+            try { prepared = await inspectTarget(scope); }
+            catch (error) {
+              signal.throwIfAborted();
+              if (scope !== 'chapter' || !(error instanceof StoreError)
+                || (error.code !== 'REVIEW_CHAPTER_RANGE' && error.cause?.code !== 'WORD_CHAPTER_RANGE')) throw error;
+              scope = 'paragraph';
+              prepared = await inspectTarget(scope);
+            }
+            const { target, parsed } = prepared, chapter = scope === 'chapter';
             const selection = chapter ? parsed.chapterParagraphs.join('\n\n') : parsed.selectedText;
             const related = (output.relations || []).filter(({ from, to }) => from === finding.id || to === finding.id).map(edge => {
               const peer = findings.get(edge.from === finding.id ? edge.to : edge.from);
               return { ...edge, otherSuggestion: peer?.suggestion, accepted: accepted.has(peer?.id) };
             });
             const proposal = await this.draftBatchProposal(worker, ask, signal, selection, chapter ? parsed.chapterParagraphs : undefined, {
-              task: 'draft-review-revision', scope: item.scope, finding, related, context: target.context,
+              task: 'draft-review-revision', scope, finding, related, context: target.context,
               original: chapter ? parsed.chapterParagraphs : selection, containingParagraph: chapter ? undefined : target.original,
-              summary: output.summary, question: input.question, language: input.language,
+              summary: output.summary, authorRequest: input.instruction, question: input.question, language: input.language,
             });
             const evidence = { sources: [] };
             await this.store.write(() => this.store.transaction(() => {
@@ -361,12 +399,13 @@ export class ManuscriptReview {
               const entry = state.batch.items.find(value => value.findingId === item.findingId);
               const draftId = 'j_' + randomUUID(), stamp = now();
               const draftInput = { objectId, format: 'docx', expectedRevision: row.revision, wordSelection: target.wordSelection, selectedText: selection,
-                batchTarget: { path: finding.path, index: target.index, original: target.original, quote: finding.quote, scope: item.scope, chapterBlocks: target.chapterBlocks }, batchFindingId: finding.id,
+                batchTarget: { path: finding.path, index: target.index, original: target.original, quote: finding.quote, scope, chapterBlocks: target.chapterBlocks }, batchFindingId: finding.id,
                 ...(chapter ? { conversationKind: 'chapter' } : {}) };
               const draftOutput = { objectId, original: selection, expectedRevision: row.revision, proposal, evidence, review: 'pending',
                 ...(chapter ? { originalParagraphs: parsed.chapterParagraphs } : {}) };
               this.store.db.prepare('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').run(draftId, projectId, 'writing.sentence', 'succeeded', '审阅改稿完成，等待逐条对照', JSON.stringify(draftInput), JSON.stringify(draftOutput), null, 'review-draft:' + draftId, jobId, stamp, stamp);
-              Object.assign(entry, { state: 'ready', jobId: draftId });
+              Object.assign(entry, { state: 'ready', jobId: draftId, scope });
+              if (scope !== item.scope) entry.scopeAdjusted = true;
               state.decisions[item.findingId] = { jobId: draftId, dismissed: false };
               this.saveOutput(audit, state, audit.status, audit.phase);
             }));
@@ -402,7 +441,7 @@ export class ManuscriptReview {
     const payload = { ...data, citationMarkers: (paragraphs || [original]).map(citationMarkers) };
     const validate = text => {
       signal.throwIfAborted();
-      const json = batchReplyJSON(text);
+      const json = reviewReplyJSON(text);
       check(json.startsWith('{'), 'INVALID_PROPOSAL', '模型未返回有效的改写格式，请重试。', 502);
       const proposal = validateProposal(json, original, { sources: [] }, paragraphs);
       check(proposal.replacement !== original && proposal.reason.trim(), 'INVALID_PROPOSAL', '子智能体未返回有效改动或修改理由。可重新生成这条建议。', 502);
@@ -442,22 +481,37 @@ export class ManuscriptReview {
     const context = { question: input.question, language: input.language, authorRequest: input.instruction, outline };
     const reviewSection = async (worker, index, field, task, data) => {
       const section = input.sections[index];
-      const recoverable = worker.childId && [anchorError, detailError, responseError].includes(worker.error);
-      if (recoverable && this.previousSectionReply) {
+      const parse = text => sectionResult(text, section, input.paragraphs, outline);
+      const prompt = [MANUSCRIPT_REVIEW_GUIDANCE, task, format, reviewClassification].join('\n');
+      const concisePrompt = [MANUSCRIPT_REVIEW_GUIDANCE, task, CONCISE_SECTION_REPLY].join('\n');
+      const payload = { ...context, section, ...data };
+      let childId = worker.childId;
+      const askSection = (code, concise) => ask({ childId }, section.title,
+        concise ? concisePrompt : code ? `${prompt}\n${SECTION_REPAIR[code]}` : prompt,
+        code ? { ...payload, repair: { code, ...(concise ? { concise } : {}) } } : payload,
+        (state, id) => { childId = id; state.workers[index].childId = id; });
+      let repairCode;
+      if (childId && worker.error && this.previousSectionReply) {
         try {
-          const previous = await this.previousSectionReply({
-            parentId: input.parentId, childId: worker.childId, sectionId: section.id, exchange: field === 'cross', signal,
-          });
-          if (previous) return sectionResult(previous, section, input.paragraphs, outline);
-        } catch { signal.throwIfAborted(); }
+          const previous = await this.previousSectionReply({ parentId: input.parentId, childId, sectionId: section.id, exchange: field === 'cross', signal });
+          if (previous) return parse(previous);
+        } catch (error) {
+          signal.throwIfAborted();
+          if (error instanceof StoreError && Object.hasOwn(SECTION_REPAIR, error.code)) repairCode = error.code;
+        }
       }
-      const text = await ask(worker, section.title, task + format + reviewClassification, { ...context, section, ...data },
-        (state, id) => { state.workers[index].childId = id; });
-      return sectionResult(text, section, input.paragraphs, outline);
+      for (let attempt = repairCode ? 1 : 0; ; attempt++) {
+        try { return parse(await askSection(repairCode, attempt === 2)); }
+        catch (error) {
+          signal.throwIfAborted();
+          if (attempt === 2 || !(error instanceof StoreError) || !Object.hasOwn(SECTION_REPAIR, error.code)) throw error;
+          repairCode = error.code;
+        }
+      }
     };
     if (stage === 'reading') {
       await this.sections(owner, signal, 'first',
-        (worker, index) => reviewSection(worker, index, 'first', instruction + ' 你只负责这个小节。'));
+        (worker, index) => reviewSection(worker, index, 'first', '结合作者指定的审阅重点，找出分派小节能支撑的贡献。建议应能在本节原文落地，并指向原文证据。'));
       await this.update(owner, state => {
         state.stage = 'exchange';
         return { phase: '交流跨节发现' };
@@ -468,8 +522,8 @@ export class ManuscriptReview {
       findings: worker.first.findings.map(({ issue, quote }) => ({ issue: issue.slice(0, 160), quote: quote.slice(0, 90) })),
     }));
     await this.sections(owner, signal, 'cross', (worker, index) =>
-      reviewSection(worker, index, 'cross', instruction +
-        ' 其他小节仅提供审阅发现。用这些发现回查你负责的小节，指出存在真实依赖的关联小节，更新问题、步骤与提示词。',
+      reviewSection(worker, index, 'cross',
+        '用同伴反馈回查本节。只有可见原文支持且口径相同的证据才能纳入建议，摘要和他人判断用来定位。优先把能支撑贡献的发现接到本节论点，说明跨节改动的真实依赖，更新可执行的改法和提示词。',
       { first: worker.first, peers: first.filter(peer => peer.id !== worker.id) }));
     await this.update(owner, state => {
       state.findings = state.workers.flatMap((worker, index) => worker.cross.findings.map((item, order) => ({
@@ -482,7 +536,10 @@ export class ManuscriptReview {
 
   async summarize(owner, input, output, ask) {
     const result = decode(await ask(output.coordinator, '全文审阅汇总',
-      '根据所有小节交流后的结果汇总全文审阅。检查全文贯通性并按依赖关系排序，给出修改计划和跨小节统一术语、证据的审阅提示词。标出建议之间有实质依据的关联，before 表示 from 应在 to 之前处理，together 表示两条应同步核对。用 reason 说明具体依赖，同处一个小节或步骤本身不足以判断先后。relations 最多给 36 条。仅输出 JSON：{"summary":"全文审阅结论","plan":[{"step":"可执行步骤","findings":["实际存在的批注ID"]}],"relations":[{"from":"批注ID","to":"批注ID","kind":"before 或 together","reason":"关联依据"}],"prompt":"用于检查跨节一致性的中文提示词"}。没有问题时据实说明，prompt 为空。提示词要求按当前局部选区修改并保留来源与数字。',
+      [MANUSCRIPT_REVISION_GUIDANCE,
+        '综合各小节已确认的工作和证据，先给作者一条可用于投稿的叙事主线，再写影响最大的局部修改。summary 说清这项工作最值得发表的贡献和已有支撑。plan 按真实依赖排序，优先列出能直接改句子、重排论证或补入现有证据的步骤。prompt 供作者在局部选区修改，保留来源、数字和关键条件。',
+        '只为证据、定义或内容有实际依赖的建议连线。before 表示 from 应在 to 之前处理，together 表示两条应同步核对。用 reason 说明具体依赖，relations 最多 36 条。无具体改动时，plan 和 relations 返回空数组，prompt 返回空字符串。仅输出 JSON {"summary":"投稿前完善主线","plan":[{"step":"可执行步骤","findings":["实际存在的批注ID"]}],"relations":[{"from":"批注ID","to":"批注ID","kind":"before 或 together","reason":"关联依据"}],"prompt":"可用于局部修改的中文提示词"}。',
+      ].join('\n'),
       { question: input.question, authorRequest: input.instruction,
         sections: output.workers.map((worker, i) => ({ id: worker.id, path: input.sections[i].path, summary: worker.cross.summary })),
         findings: output.findings.map(({ id, workerId, issue, steps, links }) => ({ id, workerId, issue: issue.slice(0, 300), steps: steps.slice(0, 300), links })) },
@@ -507,7 +564,7 @@ export class ManuscriptReview {
     const worker = index < 0 ? output.coordinator : output.workers[index];
     const label = index < 0 ? '全文审阅汇总' : input.sections[index].title;
     const result = decode(await ask(worker, label,
-      '回答作者关于本轮审阅的追问。保留已有分工和审阅快照，标明依赖的批注编号和需核对的资料。可以细化修改步骤和提示词。仅返回 JSON 对象 {"answer":"中文回复"}。',
+      MANUSCRIPT_REVISION_GUIDANCE + '\n回答作者关于本轮审阅的追问。给出可以执行的表述或修改步骤，注明依据、批注编号和必要的核对事项。仅返回 JSON 对象 {"answer":"中文回复"}。',
       { question: request.text, findings: output.findings.map(({ id, issue }) => ({ id, issue: issue.slice(0, 200) })) },
       (state, id) => { if (index < 0) state.coordinator = { childId: id }; else state.workers[index].childId = id; }));
     check(shape(result.answer, 6000), 'REVIEW_RESPONSE_INVALID', '追问未收到完整回复，可继续重试。', 502);
@@ -687,7 +744,7 @@ export class ManuscriptReview {
     const { wordSelection } = reviewWordRange(current, { ...item, original: input.paragraphs[item.index], scope: owner.scope,
       exactRevision: [input.expectedRevision, output.commentRevision].includes(row.revision) });
     if (owner.scope === 'locate') return { wordSelection, revision: row.revision };
-    const instruction = [item.prompt, '审阅建议：' + item.suggestion, '修改路径：' + item.steps].join('\n');
+    const instruction = [item.prompt, '审阅建议：' + item.suggestion, '修改路径：' + item.steps, MANUSCRIPT_REVISION_GUIDANCE].join('\n');
     const jobId = await this.runtime.nativeWriting.prepare({
       projectId: owner.projectId, objectId: owner.objectId, expectedRevision: row.revision,
       wordSelection, instruction, revisionMode: owner.scope === 'chapter' ? 'chapter' : 'sentence',

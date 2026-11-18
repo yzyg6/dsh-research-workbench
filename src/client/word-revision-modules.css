@@ -207,3 +207,84 @@
   background: #f5f8fc;
   border-radius: 6px;
 }
+.rw-app .rw-translation {
+  container-type:inline-size;
+  display:flex;
+  flex:1;
+  flex-direction:column;
+  min-width:0;
+  min-height:0;
+  color:var(--rw-ink,#20314b);
+  background:var(--rw-surface,#fff);
+}
+.rw-app .rw-translation[hidden] {display:none}
+.rw-app .rw-translation-header,.rw-app .rw-translation-progress,.rw-app .rw-translation-actions {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:8px;
+  padding:8px 12px;
+}
+.rw-app .rw-translation-header {border-bottom:1px solid var(--rw-line,#e0e7ef)}
+.rw-app .rw-translation-header h3 {display:flex;align-items:center;gap:6px;margin:0 auto 0 0;font-size:14px}
+.rw-app .rw-translation-header select {max-width:45%}
+.rw-app .rw-translation-setup {
+  display:grid;
+  grid-template-columns:minmax(92px,1fr) minmax(110px,2fr) auto;
+  gap:8px;
+  align-items:end;
+  padding:10px 12px;
+  background:#f4f7fb;
+}
+.rw-app .rw-translation-setup label {display:grid;gap:4px;font-size:12px}
+.rw-app .rw-translation-setup small {grid-column:1/-1;color:#536780}
+.rw-app .rw-translation input,.rw-app .rw-translation select,.rw-app .rw-translation textarea {
+  min-width:0;
+  border:1px solid var(--rw-line,#dbe4ee);
+  border-radius:5px;
+  padding:6px 7px;
+  font:inherit;
+  color:inherit;
+  background:#fff;
+}
+.rw-app .rw-translation-progress {font-size:12px;color:#50647e}
+.rw-app .rw-translation-schedule {margin:0 12px 6px;border:1px solid #dbe4ee;border-radius:6px;font-size:12px;min-height:0;overflow:auto;max-height:30vh}
+.rw-app .rw-translation-schedule summary {cursor:pointer;padding:5px 8px;overflow-wrap:anywhere}
+.rw-app .rw-translation-schedule > summary {position:sticky;top:0;background:#f6f8fb;z-index:1}
+.rw-app .rw-translation-history-note {margin:0 12px 6px;color:#52647c}
+.rw-app .rw-translation-schedule > summary span,.rw-app .rw-dispatch-state {color:#52647c;margin-left:4px}
+.rw-app .rw-dispatch-tree {padding:4px 8px 7px;line-height:1.5}
+.rw-app .rw-dispatch-tree details details {margin-left:12px;border-left:1px solid #dbe4ee}
+.rw-app .rw-dispatch-tree ol {padding-left:36px;margin:1px 0 4px}
+.rw-app .rw-dispatch-tree li {padding:3px 0;overflow-wrap:anywhere}
+.rw-app .rw-dispatch-state[data-state="running"],.rw-app .rw-dispatch-state[data-state="retrying"] {color:#174fa1;font-weight:600}
+.rw-app .rw-dispatch-state[data-state="done"] {color:#306947}
+.rw-app .rw-dispatch-state[data-state="failed"],.rw-app .rw-dispatch-tree small {color:#98452c}
+.rw-app .rw-dispatch-tree small {display:block;margin-inline:8px}
+.rw-app .rw-translation-chapter {padding:0 12px 8px}
+.rw-app .rw-translation-chapter select {width:100%}
+.rw-app .rw-translation-scroll {flex:1;min-height:0;overflow:auto;padding:0 12px 12px;overscroll-behavior:contain}
+.rw-app .rw-translation-columns,.rw-app .rw-translation-row {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0}
+.rw-app .rw-translation-columns {
+  position:sticky;
+  top:0;
+  z-index:1;
+  padding:7px 0;
+  background:#fff;
+  color:#536780;
+  font-size:12px;
+}
+.rw-app .rw-translation-columns strong {padding-inline:9px}
+.rw-app .rw-translation-row {border:1px solid #e1e9f2;border-radius:7px;margin-bottom:8px;background:#fcfdff}
+.rw-app .rw-translation-row > div {padding:9px;min-width:0;overflow-wrap:anywhere}
+.rw-app .rw-translation-row > div + div {border-left:1px solid #dce7f3;background:#f2f7fd}
+.rw-app .rw-translation-row p {margin:0 0 4px;line-height:1.65;font-size:13px}
+.rw-app .rw-translation-row textarea {width:100%;min-height:100px;resize:vertical;box-sizing:border-box}
+.rw-app .rw-translation .rw-error {margin:4px 12px}
+.rw-app .rw-translation-images {border:1px solid #ecdcbc;background:#fff8ea;border-radius:6px;padding:6px 8px;margin-bottom:6px;color:#795813}
+.rw-app .rw-translation-hint {display:block;color:#536780;padding-block:4px}
+.rw-app .rw-translation > footer {border-top:1px solid #e1e9f2;background:#fff}
+@container (max-width:440px) {
+  .rw-app .rw-translation-setup {grid-template-columns:1fr 1fr}
+  .rw-app .rw-translation-setup > button {grid-column:1/-1;justify-self:start}
+}

@@ -1,5 +1,7 @@
 # 第三方来源与许可
 
+英文翻译智能体的语言复核使用 [blader/humanizer](https://github.com/blader/humanizer/tree/b48c832f0f809c1b5658edbb838c2521b72f2413) v4.0.0。原始技能及 MIT 许可证随插件保存在 `src/server/vendor/humanizer/`。
+
 界面与面板交互参考 [cinderzhan/dsh-media-workbench](https://github.com/cinderzhan/dsh-media-workbench)，本次核对 commit `551a3c55d9c7a4e0330752ccac014b1b1910a6b3`。参考内容为紧凑工具栏、面板换位／缩放／最小化恢复、保留原生会话及业务资料隔离的设计。科研项目模型与当前 DSH 承载实现保存在本项目源代码中。
 
 参考仓库采用 MIT License，Copyright (c) 2026 cinderzhan。参考源码的完整许可快照保存在开发过程目录；许可原文为：

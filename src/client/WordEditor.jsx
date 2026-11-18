@@ -11,10 +11,11 @@ import {WordWorkspaceFiles} from './WordWorkspaceFiles.jsx';
 import { Icon } from './icons.jsx';
 import {WordLiveEditor,connectWordLive} from './word-live.mjs';
 import {wordPosition,restoreWordPosition,readReviewContext,mirrorReviewRevision,mirrorWordRevision,showWordComments} from './word-revision.mjs';
-import {prepareWordBoot,readWordBytes} from './word-boot.mjs';
+import {prepareWordBoot,readWordDocument} from './word-boot.mjs';
 import {readDocumentPosition,rememberDocumentPosition} from './document-position.mjs';
 import { ManuscriptReviewPanel } from './ManuscriptReview.jsx';
 import { ReviewBatchComparison } from './ReviewBatchComparison.jsx';
+import { WordTranslationPanel } from './WordTranslation.jsx';
 import { WordConversationDocument, WordRevisionScope } from './WordRevisionModules.jsx';
 
 /** One lazily mounted WASM instance. No full-document polling, no base64 DOCX. */
@@ -39,6 +40,9 @@ export function WordEditor({api,project,object,sentence,onSaved,registerSave,onD
   },[]);
   const [auditOrigin,setAuditOrigin]=React.useState(null);
   const [batchOwner,setBatchOwner]=React.useState(null);
+  const [translationVisited,setTranslationVisited]=React.useState(false);
+  const showTranslation=()=>{setTranslationVisited(true);setTab('translation')};
+  const selectBatchFinding=React.useCallback(findingId=>setBatchOwner(owner=>owner&&owner.findingId!==findingId?{...owner,findingId}:owner),[]);
   const selectionFlow=React.useRef({read:0,running:false,queued:null,lastKey:null,generation:0,closed:false});
   const discussionOperation=React.useRef(null),[dialogBusy,setDialogBusy]=React.useState(false);
   const [dialogError,setDialogError]=React.useState('');
@@ -70,19 +74,28 @@ export function WordEditor({api,project,object,sentence,onSaved,registerSave,onD
   const locate=async text=>{try{if(!bridge.current)throw Error('请切换至 Word 编辑模式查找。');await bridge.current.execute('edit.find',{text:text.slice(0,80),special:false});setNotice('已在 Word 中查找相关段落。')}catch(e){setError(e.message)}};
   const markDirty=value=>{dirty.current=value;live.current.onDirty(value)};
   const report=(stage,info={})=>{const {project,object}=live.current;void api.mutate('wordEditorStatus',{projectId:project.id,objectId:object.id,revision:loadedRevision.current,stage,instanceId:metrics.current.instanceId,engineDirty:info.dirty,bootMs:performance.now()-metrics.current.started,wasmBytes:frame.current?.contentWindow?.wordcraftMemoryBytes?.()||metrics.current.wasmBytes,heapBytes:performance.memory?.usedJSHeapSize,...info.perf}).catch(()=>{})};
-  const locked=value=>{const active=value||liveOperation.current;if(frame.current)frame.current.inert=active;setBusy(active)};
+  const locked=value=>{const active=value||liveOperation.current||Boolean(revisionOperation.current);if(frame.current)frame.current.inert=active;setBusy(active)};
   const ensureManaged=async supplied=>{const info=supplied||await bridge.current.uiInspect({});if(managedId.current===null||info.document!==managedId.current||info.documents?.length!==1)throw Error('编辑器已打开其他文档。请将其另存后，重新打开当前工作区 Word，避免保存到错误稿件。');return info};
   const persistExport=async data=>{
     if(!/\.docx$/i.test(data.name||''))throw Error('工作台保存接收 DOCX。PDF 等导出请使用原应用。');
     await ensureManaged();const bytes=data.bytes instanceof ArrayBuffer?data.bytes:data.bytes?.buffer;
     if(!bytes||bytes.byteLength>32*1024*1024)throw Error('Word 保存内容为空或超过32 MiB。');
     const {project,object}=live.current,next=await api.saveWord(project.id,object.id,loadedRevision.current,bytes),saved=next.projects.find(p=>p.id===project.id).objects.find(o=>o.id===object.id);
-    if(next.actionResult?.wordUpdate?.reopen){
-      const engine=bridge.current,position=await wordPosition(engine);
-      await reopenSavedWord(engine,saved,position);
-      requestCommentPane(saved.revision);
+    const update=next.actionResult?.wordUpdate;
+    if(!update?.reopen)loadedRevision.current=update?.revision??saved.revision;
+    markDirty(false);
+    live.current.onSaved(next);
+    if(update?.reopen){
+      const engine=bridge.current;
+      try{
+        const position=await wordPosition(engine);
+        await reopenSavedWord(engine,saved,position);
+        requestCommentPane(update.revision);
+      }catch(error){setError('修改已保存，正在重新同步 Word。'+error.message)}
     }
-    loadedRevision.current=saved.revision;markDirty(false);live.current.onSaved(next);void rememberViewport();setNotice(`已保存到同一 Word 工作副本 · 原件保留`);return saved;
+    void rememberViewport();
+    setNotice('已保存到同一 Word 工作副本 · 原件保留');
+    return saved;
   };
   const save=(suppliedInfo)=>{
     if(saveOperation.current)return saveOperation.current;
@@ -91,7 +104,7 @@ export function WordEditor({api,project,object,sentence,onSaved,registerSave,onD
       const info=await ensureManaged(suppliedInfo);if(info.dirty)markDirty(true);if(!dirty.current)return info;
       locked(true);frame.current?.contentWindow?.document.activeElement?.blur();
       try{await new Promise((resolve,reject)=>{const timer=setTimeout(()=>{exportWaiter.current=null;reject(Error('Word 导出超时，编辑内容仍保留。'))},30000);exportWaiter.current={resolve:value=>{clearTimeout(timer);resolve(value)},reject:error=>{clearTimeout(timer);reject(error)}};void bridge.current.execute('file.save',{}).catch(error=>{const waiter=exportWaiter.current;exportWaiter.current=null;waiter?.reject(error)})});return{...info,dirty:false}}finally{locked(false)}
-    })();saveOperation.current=operation;operation.finally(()=>{if(saveOperation.current===operation)saveOperation.current=null}).catch(()=>{});return operation;
+    })();saveOperation.current=operation;operation.finally(()=>{if(saveOperation.current===operation){saveOperation.current=null;setRevisionEpoch(value=>value+1)}}).catch(()=>{});return operation;
   };
   React.useEffect(()=>setJobId(initialJob?.id||null),[initialJob?.id]);
   const saveRef=React.useRef(save);saveRef.current=save;
@@ -163,7 +176,7 @@ export function WordEditor({api,project,object,sentence,onSaved,registerSave,onD
     return operation;
   };
   const capture=async(explicit=false)=>{
-    if(tab==='audit'||(tab==='review'&&batchOwner))return;
+    if(tab==='audit'||tab==='translation'||(tab==='review'&&batchOwner))return;
     if(revisionMode==='chapter'&&!explicit)return;
     if(!bridge.current||busy||liveOperation.current||opening.current||saveOperation.current||fileOperation.current)return;
     const flow=selectionFlow.current,read=++flow.read,generation=flow.generation;
@@ -206,29 +219,34 @@ export function WordEditor({api,project,object,sentence,onSaved,registerSave,onD
     }catch(e){if(active())setError(e.message)}
   };
   const captureRef=React.useRef(capture);captureRef.current=capture;
-  const openDocument=async(cancelled,zoom=95,position=null,resuming=false,savedObject)=>{
-    const {project}=live.current,object=savedObject||live.current.object;opening.current=true;setPhase('正在打开 Word 正文…');
+  const openDocument=async(cancelled,zoom=95,position=null,resuming=false,savedObject,savedDocument)=>{
+    const {project}=live.current,object=savedObject||live.current.object;
+    opening.current=true;
+    if(!savedObject)setPhase('正在打开 Word 正文…');
     try{
-      const prefetched=pendingDocument.current;pendingDocument.current=null;
-      const bytes=prefetched?.objectId===object.id&&prefetched.revision===object.revision?prefetched.bytes:await readWordBytes(api,project.id,object.id,bootController.current?.signal);if(cancelled())return;
+      const prefetched=savedDocument||pendingDocument.current;pendingDocument.current=null;
+      const {bytes,revision}=prefetched?.objectId===object.id&&prefetched.revision>=object.revision
+        ?prefetched:await readWordDocument(api,project.id,object.id,object.revision,bootController.current?.signal);
+      if(cancelled())return;
       const previous=(await bridge.current.uiInspect({})).document;
+      if(cancelled())return;
       frame.current.contentWindow.postMessage({type:'wordcraft:open',name:object.title.endsWith('.docx')?object.title:object.title+'.docx',bytes},location.origin,[bytes]);
       // Initial open is asynchronous; inspect only while opening (bounded).
       const deadline=performance.now()+30000;
-      for(let n=0;performance.now()<deadline;n++){if(cancelled())return;await new Promise(resolve=>setTimeout(resolve,n<10?50:150));if(cancelled())return;const info=await bridge.current.uiInspect({});if(info.documents?.length===1&&info.document!==previous){managedId.current=info.document;loadedRevision.current=object.revision;markDirty(false);await setWordZoom(bridge.current,zoom);await showWordDocument(bridge.current);if(position)await restoreWordPosition(bridge.current,position,position.selection,{waitForScroll:resuming}).catch(error=>{if(!resuming)throw error});if(cancelled())return;setPhase('');report('ready',info);if(continueDiscussion.current){continueDiscussion.current=false;void dialogActions.current?.openConversation({preserveReview:true})}return}}
+      for(let n=0;performance.now()<deadline;n++){if(cancelled())return;await new Promise(resolve=>setTimeout(resolve,n<10?50:150));if(cancelled())return;const info=await bridge.current.uiInspect({});if(cancelled())return;if(info.documents?.length===1&&info.document!==previous){managedId.current=info.document;loadedRevision.current=revision;markDirty(false);await setWordZoom(bridge.current,zoom);await showWordDocument(bridge.current);if(position)await restoreWordPosition(bridge.current,position,position.selection,{waitForScroll:resuming}).catch(error=>{if(!resuming)throw error});if(cancelled())return;setPhase('');report('ready',info);if(continueDiscussion.current){continueDiscussion.current=false;void dialogActions.current?.openConversation({preserveReview:true})}return}}
       throw Error('Word 打开超时，可切换轻量阅读或重新打开。');
     }finally{opening.current=false}
   };
-  const reopenSavedWord=async(engine,saved,position,{prefetch=false}={})=>{
-    const cancelled=()=>bridge.current!==engine||live.current.object.id!==saved.id;
+  const reopenSavedWord=async(engine,saved,position)=>{
+    const signal=bootController.current?.signal;
+    const cancelled=()=>signal?.aborted||bridge.current!==engine||live.current.object.id!==saved.id;
     if(cancelled())return;
-    if(prefetch){
-      const bytes=await readWordBytes(api,live.current.project.id,saved.id,bootController.current?.signal);
-      if(cancelled())return;
-      pendingDocument.current={objectId:saved.id,revision:saved.revision,bytes};
-    }
+    const document=await readWordDocument(api,live.current.project.id,saved.id,saved.revision,signal);
+    if(cancelled())return;
+    if(document.revision<saved.revision)throw Error('暂未读到最新 Word 版本，当前正文保留。');
     await engine.execute('file.close',{force:true});
-    await openDocument(cancelled,wordZoom(position?.view),position,true,saved);
+    if(cancelled())return;
+    await openDocument(cancelled,wordZoom(position?.view),position,true,saved,document);
   };
   React.useEffect(()=>{
     if(mode!=='edit')return;let closed=false,ready=false,detach=()=>{},captureTimer,positionTimer,moduleUrl,bootUrl;const controller=new AbortController();bootController.current=controller;
@@ -270,7 +288,7 @@ export function WordEditor({api,project,object,sentence,onSaved,registerSave,onD
           try{
             const result=await api.mutate('systemFonts',{});if(closed)return;
             const selected=all?result.actionResult:documentSystemFonts(result.actionResult,families);
-            const installed=await installSystemFonts(bridge.current,selected,api.systemFontUrl,controller.signal,label=>all?setNotice('正在加载系统字体：'+label):families===requiredFonts.current?setPhase('正在加载文档字体：'+label):undefined);
+            const installed=await installSystemFonts(bridge.current,selected,api.systemFontUrl,controller.signal,label=>all?setNotice('正在加载系统字体：'+label):!ready&&families===requiredFonts.current?setPhase('正在加载文档字体：'+label):undefined);
             if(closed)return;
             setFonts(previous=>({loaded:[...new Set([...(previous?.loaded||[]),...installed.loaded])],failed:installed.failed}));
             if(installed.failed.length)setError('以下系统字体未加载：'+installed.failed.join('、'));
@@ -301,7 +319,7 @@ export function WordEditor({api,project,object,sentence,onSaved,registerSave,onD
         const waiter=exportWaiter.current;exportWaiter.current=null;
         if(waiter?.acknowledgeOnly){markDirty(false);waiter.resolve();return}
         if(saveOperation.current&&!waiter){setError('上一次保存仍在进行，请稍后重试。');return}
-        locked(true);const operation=persistExport(data);if(!waiter)saveOperation.current=operation;void operation.then(result=>waiter?.resolve(result)).catch(e=>{markDirty(true);setError(e.message);waiter?.reject(e)}).finally(()=>{if(saveOperation.current===operation)saveOperation.current=null;locked(false)});
+        locked(true);const operation=persistExport(data);if(!waiter)saveOperation.current=operation;void operation.then(result=>waiter?.resolve(result)).catch(e=>{markDirty(true);setError(e.message);waiter?.reject(e)}).finally(()=>{if(saveOperation.current===operation){saveOperation.current=null;setRevisionEpoch(value=>value+1)}locked(false)});
       }
     };
     window.addEventListener('message',message);
@@ -312,33 +330,53 @@ export function WordEditor({api,project,object,sentence,onSaved,registerSave,onD
     if(mode!=='edit'||phase||!bridge.current||!api.wordControl)return;
     const currentBridge=bridge.current;let connected=true;
     const active=()=>{if(!connected||bridge.current!==currentBridge||live.current.object.id!==object.id||live.current.project.id!==project.id)throw Error('Word 已关闭或切换文稿，请重新读取。')};
-    const editor=new WordLiveEditor({bridge:currentBridge,active,managed:()=>liveRequest.current.managed(),revision:()=>liveRequest.current.revision(),dirty:()=>liveRequest.current.dirty(),save:()=>liveRequest.current.save(),loadFonts:families=>liveRequest.current.loadFonts(families)});
-    const disconnect=connectWordLive({api,owner:{projectId:project.id,objectId:object.id,instanceId:metrics.current.instanceId},editor,lock:value=>{if(!connected)return;liveOperation.current=value;locked(value)},onError:setError,onConnectionError:setConnectionError,onRecovered:()=>setConnectionError(''),onSaved:()=>setNotice('DSH 已直接修改 Word 并保存，可在 Word 中撤销或从 Git 历史恢复。')});
+    const owner={projectId:project.id,objectId:object.id,instanceId:metrics.current.instanceId};
+    const editor=new WordLiveEditor({bridge:currentBridge,active,managed:async()=>{await revisionOperation.current?.done;active();return liveRequest.current.managed()},revision:()=>liveRequest.current.revision(),dirty:()=>liveRequest.current.dirty(),save:()=>liveRequest.current.save(),loadFonts:families=>liveRequest.current.loadFonts(families),applyText:id=>api.wordControl('applyText',{...owner,id})});
+    const disconnect=connectWordLive({api,owner,editor,lock:value=>{if(!connected)return;liveOperation.current=value;locked(value);if(!value)setRevisionEpoch(epoch=>epoch+1)},onError:setError,onConnectionError:setConnectionError,onRecovered:()=>setConnectionError(''),onSaved:result=>setNotice(result.action==='replace_text'?`已保存 ${result.replaced} 处正文修改，可在文档 Git 历史中恢复。`:'DSH 已直接修改 Word 并保存，可在 Word 中撤销或从 Git 历史恢复。')});
     reconnectControl.current=disconnect.retry;
     return()=>{connected=false;reconnectControl.current=null;liveOperation.current=false;locked(false);disconnect()};
   },[mode,Boolean(phase),object.id,project.id]);
   React.useEffect(()=>{
-    if(mode!=='edit'||!bridge.current||opening.current||revisionOperation.current||saveOperation.current||loadedRevision.current===object.revision)return;
-    let cancelled=false;
+    if(mode!=='edit'||phase||!bridge.current||opening.current||revisionOperation.current
+      ||saveOperation.current||liveOperation.current||loadedRevision.current>=object.revision)return;
+    const engine=bridge.current,signal=bootController.current?.signal;
+    const active=()=>!signal?.aborted&&bridge.current===engine;
+    let finish;
+    const operation={objectId:object.id,done:new Promise(resolve=>finish=resolve)};
+    revisionOperation.current=operation;
+    locked(true);
     void(async()=>{
-      const update=object.metadata?.wordReviewUpdate;
-      const onlyComments=update?.revision===object.revision&&update.fromRevision===loadedRevision.current;
-      const previous=await ensureManaged();
-      if(dirty.current||previous.dirty){
-        if(onlyComments){await save(previous);return}
-        throw Error('Word 已在其他位置更新，当前输入保留，请先另存副本。');
+      // A save can arrive while the editor is opening an earlier DOCX.
+      // Read the current target again after each open.
+      while(active()&&loadedRevision.current<live.current.object.revision){
+        const saved=live.current.object;
+        const update=saved.metadata?.wordReviewUpdate;
+        const showComments=saved.metadata?.wordCommentViewRevision===saved.revision;
+        const onlyComments=update?.revision===saved.revision&&update.fromRevision===loadedRevision.current;
+        const previous=await ensureManaged();
+        if(!active())return;
+        if(dirty.current||previous.dirty){
+          if(onlyComments){await save(previous);continue}
+          throw Error('Word 已在其他位置更新，当前输入保留，请先另存副本。');
+        }
+        const position=await wordPosition(engine);
+        if(!onlyComments){
+          const prepared=await api.mutate('prepareWordEdit',{projectId:project.id,objectId:object.id},{signal});
+          if(!active())return;
+          requiredFonts.current=prepared.actionResult.fontFamilies||[];await loadMoreFonts.current?.();
+        }
+        if(!active())return;
+        if(saved.revision<live.current.object.revision)continue;
+        await reopenSavedWord(engine,saved,position);
+        if(active()&&showComments)requestCommentPane(saved.revision);
       }
-      locked(true);
-      const engine=bridge.current,position=await wordPosition(engine);
-      if(!onlyComments){
-        const prepared=await api.mutate('prepareWordEdit',{projectId:project.id,objectId:object.id});if(cancelled)return;
-        requiredFonts.current=prepared.actionResult.fontFamilies||[];await loadMoreFonts.current?.();
-      }
-      if(cancelled)return;
-      await reopenSavedWord(engine,object,position);
-      if(onlyComments)requestCommentPane(object.revision);
-    })().catch(e=>setError(e.message)).finally(()=>locked(false));return()=>{cancelled=true};
-  },[object.revision,mode,revisionEpoch]);
+      if(active())setError(message=>message.startsWith('修改已保存，正在重新同步 Word。')?'':message);
+    })().catch(e=>{if(active())setError(e.message)}).finally(()=>{
+      if(revisionOperation.current===operation)revisionOperation.current=null;
+      finish();
+      if(active())locked(false);
+    });
+  },[object.revision,mode,phase,revisionEpoch]);
   React.useEffect(()=>{
     const engine=bridge.current;
     if(!commentPaneRequest||mode!=='edit'||!engine||phase||busy||loadedRevision.current!==object.revision||object.revision<commentPaneRequest.revision)return;
@@ -390,7 +428,7 @@ export function WordEditor({api,project,object,sentence,onSaved,registerSave,onD
             loadedRevision.current=update.revision;markDirty(false);mirrored=true;
           }catch{markDirty(false)}finally{operation.mirroring=false;}
         }
-        if(!mirrored)await reopenSavedWord(activeBridge,updatedObject,position,{prefetch:operation.quiet||Boolean(update.liveRevision)});
+        if(!mirrored)await reopenSavedWord(activeBridge,updatedObject,position);
         void rememberViewport({includeCaret:true});
       }
       if(!proposalUpdatedAt){setBatchOwner(null);setReviewJobId(id);setSidebarOpen(true);setTab('review');}
@@ -412,6 +450,30 @@ export function WordEditor({api,project,object,sentence,onSaved,registerSave,onD
     await save();
     const {object}=live.current;
     await api.mutate('startReviewBatch',{...owner,expectedRevision:mode==='edit'?loadedRevision.current:object.revision,operationKey:crypto.randomUUID()});
+  };
+  const startTranslation=async data=>{
+    await revisionOperation.current?.done;
+    await save();
+    const current=live.current;
+    let wordSelection;
+    if(data.scope==='selection'){
+      if(!bridge.current)throw Error('请切换到 Word 编辑模式并选中文字。');
+      await ensureManaged();
+      const {anchor,focus,text}=await bridge.current.execute('document.selection',{});
+      if(!text?.trim())throw Error('请先在 Word 正文或表格中选中文字。');
+      wordSelection={anchor,focus,text,coordinate:'wordcraft'};
+    }
+    return (await api.mutate('startWordTranslation',{
+      ...data,projectId:current.project.id,objectId:current.object.id,
+      expectedRevision:mode==='edit'?loadedRevision.current:current.object.revision,wordSelection,
+    })).actionResult;
+  };
+  const locateTranslation=async path=>{
+    if(!bridge.current)throw Error('请切换到 Word 编辑模式。');
+    await ensureManaged();
+    const point={story:'body',path,off:0};
+    await bridge.current.execute('select.range',{anchor:point,focus:point});
+    void rememberViewport({includeCaret:true});
   };
   const openReviewBatch=(jobId,findingId)=>{
     setError('');
@@ -435,25 +497,92 @@ export function WordEditor({api,project,object,sentence,onSaved,registerSave,onD
       }
     }finally{if(revisionOperation.current===operation)revisionOperation.current=null;finish();locked(false);setRevisionEpoch(value=>value+1)}
   };
-  const locateAudit=async owner=>{
+  const locateAudit=async (owner,{signal,follow=false}={})=>{
     if(!bridge.current)throw Error('请切换至 Word 编辑模式定位批注。');
-    await save();
-    const {actionResult:{wordSelection,revision}}=await api.mutate('locateReviewFinding',owner);
-    if(loadedRevision.current!==revision)throw Error('Word 正在更新，请稍后重新定位。');
-    await ensureManaged();
+    if(!follow)await save();
     const engine=bridge.current;
-    await engine.execute('select.range',{anchor:wordSelection.anchor,focus:wordSelection.focus});
-    if((await engine.execute('document.selection',{})).text!==wordSelection.text){
-      // Wordcraft counts comment range sentinels in its byte offsets.
-      const result=await engine.execute('edit.find',{text:wordSelection.text,special:false});
-      const path=JSON.stringify(wordSelection.anchor.path);
-      const match=result.matches?.find(item=>item.start.story==='body'&&JSON.stringify(item.start.path)===path&&JSON.stringify(item.end.path)===path);
-      if(!match)throw Error('Word 当前选区与批注原文不同，请核对文稿。');
-      await engine.execute('select.range',{anchor:match.start,focus:match.end});
-      if((await engine.execute('document.selection',{})).text!==wordSelection.text)throw Error('Word 无法选中这条批注对应的原文。');
+    const current=()=>{
+      signal?.throwIfAborted();
+      if(!engine||bridge.current!==engine||live.current.object.id!==owner.objectId||live.current.project.id!==owner.projectId)throw Error('Word 已关闭或切换文稿。');
+    };
+    current();
+    const info=await ensureManaged();
+    current();
+    const select=async (anchor,focus)=>{
+      current();
+      await engine.execute('select.range',{anchor,focus});
+      current();
+    };
+    const locateComment=async()=>{
+      current();
+      const [review,comments]=await Promise.all([
+        api.reviewStatus(owner.projectId,owner.objectId,owner.jobId,signal),
+        engine.execute('review.comments',{}),
+      ]);
+      const finding=review.findings?.find(item=>item.id===owner.findingId);
+      if(!finding||!review.commentDate)return false;
+      const author='科研工作台 · '+[...finding.path.at(-1)].slice(0,45).join('');
+      const firstLine=`[${finding.id}] ${finding.issue}`.split(/\r?\n/,1)[0];
+      const matches=comments.filter(comment=>comment.parent===null&&comment.anchor?.story==='body'
+        &&comment.author===author&&Date.parse(comment.date)===Date.parse(review.commentDate)
+        &&comment.text.split(/\r?\n/,1)[0]===firstLine);
+      if(matches.length!==1)return false;
+      await ensureManaged();
+      await select(matches[0].anchor,matches[0].anchor);
+      return true;
+    };
+    const locateOriginal=async()=>{
+      const {actionResult:{wordSelection,revision}}=await api.mutate('locateReviewFinding',owner,{signal});
+      current();
+      const latest=await ensureManaged();
+      if(loadedRevision.current!==revision)throw Error('Word 正在更新，请稍后重新定位。');
+      if(follow&&(latest.dirty||dirty.current))return false;
+      await select(wordSelection.anchor,wordSelection.focus);
+      if((await engine.execute('document.selection',{})).text!==wordSelection.text){
+        // Wordcraft counts comment range sentinels in its byte offsets.
+        current();
+        const result=await engine.execute('edit.find',{text:wordSelection.text,special:false});
+        const path=JSON.stringify(wordSelection.anchor.path);
+        const match=result.matches?.find(item=>item.start.story==='body'&&JSON.stringify(item.start.path)===path&&JSON.stringify(item.end.path)===path);
+        if(!match)throw Error('Word 当前选区与批注原文不同，请核对文稿。');
+        await select(match.start,match.end);
+        if((await engine.execute('document.selection',{})).text!==wordSelection.text)throw Error('Word 无法选中这条批注对应的原文。');
+      }
+      return true;
+    };
+    const locateWithFallback=async()=>{
+      try{return await locateOriginal()}
+      catch(error){
+        if(error.code==='REVIEW_ANCHOR_CHANGED'&&await locateComment())return true;
+        throw error;
+      }
+    };
+    const hasUnsavedChanges=follow&&(info.dirty||dirty.current);
+    const located=(!hasUnsavedChanges&&await locateWithFallback())||await locateComment();
+    if(!located){
+      throw Error('当前有未保存的 Word 改动，且找不到对应批注。');
     }
+    current();
     void rememberViewport({includeCaret:true});
   };
+  const locateAuditRef=React.useRef(locateAudit);locateAuditRef.current=locateAudit;
+  const [singleReviewId,singleFindingId]=(reviewJob?.reviewFinding||'').split(':');
+  const followTarget=tab==='review'?(batchOwner||{jobId:singleReviewId,findingId:singleFindingId})
+    : tab==='chat'&&reviewHandoff?.jobId===jobId?reviewHandoff?.owner:null;
+  const followReviewId=followTarget?.jobId,followFindingId=followTarget?.findingId;
+  const canFollow=mode==='edit'&&sidebarOpen&&!phase&&!busy&&!filePicker&&!fileBusy;
+  React.useEffect(()=>{
+    if(!canFollow||!followReviewId||!followFindingId)return;
+    const controller=new AbortController();
+    const {signal}=controller;
+    const timer=setTimeout(()=>{
+      const owner={projectId:project.id,objectId:object.id,jobId:followReviewId,findingId:followFindingId};
+      void locateAuditRef.current(owner,{signal,follow:true}).catch(error=>{
+        if(!signal.aborted)setNotice(error.message);
+      });
+    },80);
+    return()=>{clearTimeout(timer);controller.abort()};
+  },[canFollow,project.id,object.id,object.revision,followReviewId,followFindingId]);
   const prepareAuditRevision=async owner=>{
     await save();
     setDialogError('');setSelectionFeedback(null);
@@ -461,7 +590,7 @@ export function WordEditor({api,project,object,sentence,onSaved,registerSave,onD
     const {jobId:id,instruction}=next.actionResult;
     live.current.onSaved(next);
     setRevisionMode(owner.scope==='chapter'?'chapter':'sentence');
-    setReviewHandoff({jobId:id,instruction});
+    setReviewHandoff({jobId:id,instruction,owner});
     setJobId(id);setReviewJobId(id);setTab('chat');
   };
   const openAuditComparison=async id=>{
@@ -514,7 +643,7 @@ export function WordEditor({api,project,object,sentence,onSaved,registerSave,onD
     {history&&<div className="rw-revision-history">{relevant.map(item=><button key={item.id} disabled={interactionBusy} onClick={()=>{selectionFlow.current.lastKey=null;setSelectionFeedback(null);setSidebarOpen(true);setHistory(false);if(item.parentJobId&&item.batchFindingId){openReviewBatch(item.parentJobId,item.batchFindingId);return}setBatchOwner(null);setJobId(item.id);setReviewJobId(item.id);setTab('review');if(item.native)void sentence.onNativeOpen?.(item.id)}}>{(item.original||item.output?.original)?.slice(0,60)}<small>{item.phase}</small></button>)}</div>}
     <div className="rw-word-layout" ref={sidebarBoard}><div className="rw-word-document">{toolbar}
     {filePicker&&<WordWorkspaceFiles project={project} object={object} busy={fileBusy} error={fileError} onSelect={item=>void selectFile(item)} onClose={()=>setFilePicker(false)} onBrowse={onBrowseWorkspace?()=>{setFilePicker(false);onBrowseWorkspace()}:null} onAdvanced={()=>{void bridge.current.execute('ui.backstage',{value:true,page:'info'}).then(()=>setFilePicker(false)).catch(e=>setFileError(e.message))}}/>}
-    {mode==='edit'?<div className="rw-word-frame-wrap" inert={filePicker||undefined}>{busy&&revisionOperation.current&&!revisionOperation.current.quiet&&<div className="rw-word-update-status" role="status">正在保存修改…</div>}{(phase||(busy&&!revisionOperation.current))&&<div className="rw-word-loading" role="status">{busy?'正在保存或更新 Word…':phase}</div>}<iframe ref={frame} srcDoc={frameHtml||undefined} onLoad={bootstrapFrame} title="Wordcraft 论文编辑器" className="rw-word-frame" /></div>:<WordReader api={api} project={project} object={object} {...reader}/>}
+    {mode==='edit'?<div className="rw-word-frame-wrap" inert={filePicker||undefined}>{busy&&!phase&&<div className="rw-word-update-status" role="status">{revisionOperation.current?.objectId===object.id?'正在同步 Word 修改…':'正在保存 Word…'}</div>}{phase&&<div className="rw-word-loading" role="status">{phase}</div>}<iframe ref={frame} srcDoc={frameHtml||undefined} onLoad={bootstrapFrame} title="Wordcraft 论文编辑器" className="rw-word-frame" /></div>:<WordReader api={api} project={project} object={object} {...reader}/>}
     </div>
     <div className="rw-word-sidebar-resizer" hidden={!sidebarOpen} role="separator" aria-label="Word 对话栏宽度" aria-orientation="vertical" tabIndex={0} aria-valuemin={280} aria-valuemax={Math.round((sidebarBoard.current?.clientWidth||1300)*.55)} aria-valuenow={sidebarWidth}
       onKeyDown={event=>{if(!['ArrowLeft','ArrowRight'].includes(event.key))return;event.preventDefault();setSidebarWidth(n=>Math.max(280,Math.min((sidebarBoard.current?.clientWidth||1300)*.55,n+(event.key==='ArrowLeft'?24:-24))))}}
@@ -523,7 +652,7 @@ export function WordEditor({api,project,object,sentence,onSaved,registerSave,onD
       onKeyUp={()=>persistWidth(sidebarWidth)} onPointerUp={event=>finishResize(event)} onPointerCancel={event=>finishResize(event,true)} onLostPointerCapture={event=>finishResize(event,true)}/>
     <aside ref={sidebarElement} className="rw-word-sidebar" hidden={!sidebarOpen} aria-label="Word 右侧原生修改对话" style={{width:sidebarWidth}}>
       <header title={`DSH 原生对话 · ${project.title}`}><Icon name="chat" size={14}/><strong>论文修改</strong>
-        <nav className="rw-native-sentence-tabs" aria-label="Word 修改视图"><button aria-label="修改对话" aria-pressed={tab==='chat'} onClick={()=>setTab('chat')}>对话</button><button aria-label="左右对照与文献依据" title="左右对照与文献依据" aria-pressed={tab==='review'} disabled={!batchOwner&&!reviewJob?.output?.proposal} onClick={()=>setTab('review')}>对照{reviewJob?.output?.review==='pending'?' ·':''}</button>{api.reviewStatus&&<button aria-pressed={tab==='audit'} onClick={openAudit}>审阅</button>}<button aria-pressed={tab==='history'} onClick={()=>setTab('history')}>历史</button><button aria-pressed={tab==='related'} onClick={()=>setTab('related')}>关联{reminderCount?` · ${reminderCount}`:''}</button></nav>
+        <nav className="rw-native-sentence-tabs" aria-label="Word 修改视图"><button aria-label="修改对话" aria-pressed={tab==='chat'} onClick={()=>setTab('chat')}>对话</button><button aria-label="左右对照与文献依据" title="左右对照与文献依据" aria-pressed={tab==='review'} disabled={!batchOwner&&!reviewJob?.output?.proposal} onClick={()=>setTab('review')}>对照{reviewJob?.output?.review==='pending'?' ·':''}</button>{api.translationStatus&&<button aria-label="投稿英文翻译" title="投稿英文翻译与中英对照" aria-pressed={tab==='translation'} onClick={showTranslation}>英文</button>}{api.reviewStatus&&<button aria-pressed={tab==='audit'} onClick={openAudit}>审阅</button>}<button aria-pressed={tab==='history'} onClick={()=>setTab('history')}>历史</button><button aria-pressed={tab==='related'} onClick={()=>setTab('related')}>关联{reminderCount?` · ${reminderCount}`:''}</button></nav>
         <ActionMenu label="论文对话操作"><p className="rw-menu-context" title={project.rootPath}>{project.title}</p><p className="rw-menu-context">{object.metadata?.wordEditable?'工作区版本':'原稿'} · {object.title}</p><button disabled={interactionBusy} onClick={()=>void openConversation()}>讨论全文</button><button disabled={interactionBusy} onClick={()=>void openConversation({newThread:true})}>新建对话</button>{conversations.length>1&&<label>当前文稿的对话<select aria-label="切换论文修改对话" disabled={interactionBusy} value={job?.nativeSessionId||''} onChange={event=>{event.currentTarget.closest('details').open=false;void openConversation({sessionId:event.target.value})}}><option value="" disabled>选择对话</option>{conversations.map((thread,i)=><option key={thread.sessionId} value={thread.sessionId}>对话 {conversations.length-i}</option>)}</select></label>}</ActionMenu>
         <button className="rw-icon-button" aria-label="收起 Word 对话栏" title="收起对话栏" onClick={()=>void close()}><Icon name="close" size={13}/></button>
       </header>
@@ -531,11 +660,18 @@ export function WordEditor({api,project,object,sentence,onSaved,registerSave,onD
       {scopeVisible&&<WordRevisionScope mode={revisionMode} disabled={interactionBusy}
         canUseSelection={!interactionBusy&&!phase} feedback={selectionFeedback} text={scopeText} connecting={dialogBusy}
         onModeChange={value=>{setRevisionMode(value);selectionFlow.current.lastKey=null;setSelectionFeedback(null)}}
-        onUseSelection={()=>void capture(true)} onRetry={()=>void captureRef.current(revisionMode==='chapter')}/>}
+        onUseSelection={()=>void capture(true)} onRetry={()=>void captureRef.current(revisionMode==='chapter')} onTranslate={api.translationStatus?showTranslation:null}/>}
       {tab!=='audit'&&dialogError&&<div className="rw-word-connection-status" role="status"><span>{dialogError}</span>{job&&<button className="rw-quiet" disabled={dialogBusy} onClick={()=>void openConversation()}>重新连接</button>}</div>}
       {!scopeVisible&&tab==='chat'&&dialogBusy&&<p className="rw-native-sentence-notice" role="status">正在打开论文对话…</p>}
-      <div className="rw-native-sentence-columns"><div className="rw-native-sentence-conversation" aria-busy={selectionPending} inert={selectionBlocked||undefined} hidden={tab!=='chat'}>{job?sentence.nativeRender?.({project,job,selectionPending:selectionBlocked,autoSelectionDraft:selectionFeedback?.state==='ready'&&selectionFeedback.jobId===job.id,reviewInstruction:reviewHandoff?.jobId===job.id?reviewHandoff.instruction:null,onError:setDialogError}):<div className="rw-word-sidebar-empty"><p>可直接说“把选中文字改为宋体”或“删除全文空段落”，也可以选句润色、讨论全文。</p><button className="rw-secondary" disabled={interactionBusy||!sentence.nativeRender||Boolean(phase)} onClick={()=>void openConversation()}>{dialogError?'重新连接':'打开原生对话'}</button></div>}</div>{!batchOwner&&reviewJob?.output?.proposal&&<div className="rw-native-sentence-review" hidden={tab!=='review'}><RevisionPanel job={reviewJob} workingCopy currentRevision={object.revision} embedded busy={busy||selectionBlocked} error={error} modelReady onAction={act} onClassify={sentence.onClassify} onEditSuggestion={sentence.onEditSuggestion} onEditingChange={value=>{reviewEditing.current=value}} onClose={closeComparison}/></div>}
-        {tab==='review'&&sidebarOpen&&batchOwner&&<ReviewBatchComparison key={batchOwner.jobId} api={api} owner={batchOwner} currentRevision={object.revision} busy={busy||fileBusy||(mode==='edit'&&Boolean(phase))} onSelect={findingId=>setBatchOwner(owner=>({...owner,findingId}))} onBack={findingId=>{setAuditOrigin({jobId:batchOwner.jobId,findingId});setTab('audit')}} onStart={startReviewBatch} onApply={act}/>}
+      <div className="rw-native-sentence-columns"><div className="rw-native-sentence-conversation" aria-busy={selectionPending} inert={selectionBlocked||undefined} hidden={tab!=='chat'}>{job?sentence.nativeRender?.({project,job,selectionPending:selectionBlocked,autoSelectionDraft:selectionFeedback?.state==='ready'&&selectionFeedback.jobId===job.id,reviewInstruction:reviewHandoff?.jobId===job.id?reviewHandoff.instruction:null,onError:setDialogError}):<div className="rw-word-sidebar-empty"><p>可直接说“把参考文献第 12 条替换为……”或“把选中文字改为宋体”，也可以选句润色、讨论全文。</p><button className="rw-secondary" disabled={interactionBusy||!sentence.nativeRender||Boolean(phase)} onClick={()=>void openConversation()}>{dialogError?'重新连接':'打开原生对话'}</button></div>}</div>{!batchOwner&&reviewJob?.output?.proposal&&<div className="rw-native-sentence-review" hidden={tab!=='review'}><RevisionPanel job={reviewJob} workingCopy currentRevision={object.revision} embedded busy={busy||selectionBlocked} error={error} modelReady onAction={act} onClassify={sentence.onClassify} onEditSuggestion={sentence.onEditSuggestion} onEditingChange={value=>{reviewEditing.current=value}} onClose={closeComparison}/></div>}
+        {tab==='review'&&sidebarOpen&&batchOwner&&<ReviewBatchComparison key={batchOwner.jobId} api={api} owner={batchOwner} currentRevision={object.revision} busy={busy||fileBusy||(mode==='edit'&&Boolean(phase))} onSelect={selectBatchFinding} onBack={findingId=>{setAuditOrigin({jobId:batchOwner.jobId,findingId});setTab('audit')}} onStart={startReviewBatch} onApply={act}/>}
+        {translationVisited&&<WordTranslationPanel api={api} active={tab==='translation'&&sidebarOpen} project={project} object={object} editMode={mode==='edit'}
+          busy={busy||fileBusy||(mode==='edit'&&Boolean(phase))} onStart={startTranslation} onSaved={onSaved} onLocate={locateTranslation}
+          onOpenTarget={async id=>{
+            const target=live.current.project.objects.find(item=>item.id===id);
+            if(!target||!onSelectObject)throw Error('请从项目工作区打开英文 Word。');
+            await onSelectObject(target);
+          }}/>}
         {tab==='audit'&&sidebarOpen&&<ManuscriptReviewPanel api={api} projectId={project.id} objectId={object.id} revision={object.revision} origin={auditOrigin} busy={interactionBusy||(mode==='edit'&&Boolean(phase))} onStart={startAudit} onPublish={publishAudit} onShowComments={mode==='edit'?requestCommentPane:null} onLocate={locateAudit} onPrepare={prepareAuditRevision} onOpenComparison={openAuditComparison} onStartBatch={startReviewBatch} onOpenBatch={openReviewBatch}/>}
         {tab==='history'&&<DocumentHistory api={api} project={project} object={object} onRestore={restore}/>}<div className="rw-related-container" hidden={tab!=='related'}>{!phase&&tab==='related'&&<RelatedReminders api={api} project={project} object={object} onLocate={locate} onCount={setReminderCount}/>}</div></div>
     </aside></div>

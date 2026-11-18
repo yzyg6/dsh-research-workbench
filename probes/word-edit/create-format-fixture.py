@@ -12,6 +12,10 @@ xml=f'''<w:document xmlns:w="{w}" xmlns:m="{m}"><w:body>
 <w:p><w:pPr><w:pStyle w:val="Code"/></w:pPr><w:r><w:t xml:space="preserve">a  =  b</w:t></w:r></w:p>
 <w:tbl><w:tr><w:tc><w:p><w:r><w:t>表 格</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
 </w:body></w:document>'''
+if '--references' in sys.argv:
+ refs = ''.join(f'<w:p><w:pPr><w:ind w:left="420" w:hanging="420"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Times New Roman"/><w:sz w:val="18"/></w:rPr><w:t>[{n}] 合成文献。</w:t></w:r></w:p>'
+                for n in [12,13,14,17,39,40,42,43,44])
+ xml = xml.replace('</w:body>',refs+'</w:body>')
 with zipfile.ZipFile(target,'w',zipfile.ZIP_DEFLATED) as z:
  z.writestr('[Content_Types].xml','<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/></Types>')
  z.writestr('word/document.xml',xml)

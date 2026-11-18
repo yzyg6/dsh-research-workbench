@@ -25,7 +25,11 @@ export class WordEditing {
   }
   inspect(args){
     check(this.pending<4,'WORD_BUSY','Word 正在保存或检查，请稍后重试。',429);this.pending++;
-    const operation=this.tail.then(async()=>{const worker=this.worker||new PythonWorker(this.script);try{return await worker.call(args)}finally{if(!this.worker)await worker.close()}}).catch(error=>{throw new StoreError('WORD_INVALID',error.message||'Word 检查未通过，原文件保留。')});this.tail=operation.catch(()=>{});return operation.finally(()=>{this.pending--});
+    const operation=this.tail.then(async()=>{const worker=this.worker||new PythonWorker(this.script);try{return await worker.call(args)}finally{if(!this.worker)await worker.close()}}).catch(error=>{
+      const failure = new StoreError('WORD_INVALID',error.message||'Word 检查未通过，原文件保留。');
+      failure.cause = error;
+      throw failure;
+    });this.tail=operation.catch(()=>{});return operation.finally(()=>{this.pending--});
   }
   async source(projectId,objectId){
     const row=this.store.object(projectId,objectId);check(row.kind==='manuscript'&&row.encoding==='binary'&&/\.docx$/i.test(JSON.parse(row.metadata).workspaceFile||row.path),'INVALID_WORD','请选择 .docx 正文。');
@@ -34,6 +38,24 @@ export class WordEditing {
   }
   async context(projectId,objectId){const {path}=await this.source(projectId,objectId);return(await this.inspect({path})).text}
   async temporary(projectId){const layout=await this.store.workspaceFiles.layout(projectId),folder=await this.store.projectPath(projectId,join(layout.directories.temp,'dsh-workbench','word-edit'));await mkdir(folder,{recursive:true});return join(folder,randomUUID()+'.docx')}
+  async createDerived({ projectId, title, bytes, metadata, historyAction, beforeSave, afterSave }) {
+    return this.store.write(() => this.store.transaction(async () => {
+      beforeSave?.();
+      const id = 'o_' + randomUUID(), revision = 1, stamp = now();
+      const paths = await this.store.workspaceFiles.allocate(projectId, { objectId:id, kind:'manuscript', title, extension:'.docx', revision, versioned:false });
+      await this.store.workspaceFiles.publish(projectId, paths.working, bytes);
+      const objectTitle = basename(paths.working), sha256 = hash(bytes);
+      const meta = JSON.stringify({ ...metadata, workspaceFile:paths.working, workspaceReadOnly:true,
+        wordEditable:true, wordStorageMode:'single-copy', bytes:bytes.length,
+        sourceMtimeMs:(await stat(paths.versionPath)).mtimeMs, mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      this.store.db.prepare('INSERT INTO objects VALUES(?,?,?,?,?,?,?,?,?,?,?)').run(id, projectId, 'manuscript', objectTitle, revision, paths.version, sha256, 'binary', meta, stamp, stamp);
+      this.store.db.prepare('INSERT INTO object_versions VALUES(?,?,?,?,?,?,?,?)').run(id, projectId, revision, paths.version, sha256, 'binary', meta, stamp);
+      this.store.db.prepare('UPDATE projects SET updated_at=? WHERE id=?').run(stamp, projectId);
+      await this.store.documentHistory.append(projectId, id, bytes, revision, { action:historyAction });
+      afterSave?.(id, revision);
+      return { id, title:objectTitle, revision };
+    }));
+  }
   async saveInteractive(args){
     const {projectId,objectId,expectedRevision,bytes}=args;
     const current=this.store.object(projectId,objectId);
@@ -91,7 +113,8 @@ export class WordEditing {
       await this.store.documentHistory.ensure(projectId,objectId);
       if(sha256===object.sha256){afterSave?.(object.revision);return object.revision}
       const first=!metadata.wordEditable,layout=await this.store.workspaceFiles.layout(projectId);
-      const next={...metadata,workspaceReadOnly:true,wordEditable:true,wordStorageMode:'single-copy',wordOriginalFile:metadata.wordOriginalFile||metadata.workspaceFile,bytes:bytes.length};
+      const next={...metadata,workspaceReadOnly:true,wordEditable:true,wordStorageMode:'single-copy',bytes:bytes.length};
+      if(!metadata.wordTranslation)next.wordOriginalFile=metadata.wordOriginalFile||metadata.workspaceFile;
       if(first)next.workspaceFile=join(layout.directories.paper,`${basename(metadata.workspaceFile||object.title,extname(metadata.workspaceFile||object.title))}_工作台-${objectId.slice(-8)}.docx`);
       const revision=object.revision+1,stamp=now(),paths=await this.store.workspaceFiles.allocate(projectId,{objectId,kind:'manuscript',title:object.title,extension:'.docx',revision,metadata:next,versioned:false});
       if(reviewComments||commentStateReview)next.wordReviewUpdate={fromRevision:object.revision,revision};

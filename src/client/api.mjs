@@ -18,7 +18,7 @@ export function createApi() {
   let watchSupported=true;
   let preload;
   const request = async (name, init) => {
-    const timeout=AbortSignal.timeout(name.startsWith('word?')?90000:init?.body && /"(?:openWorkspace|refreshWorkspace|exportWord|saveFigureFromFiles|documentHistory|documentHistoryDetail|restoreDocumentHistory|reviewReminders|applySentence|undoSentence|saveObject|openFormattingConversation|previewWordFormatting|applyWordFormatting|undoWordFormatting|startManuscriptReview|publishReviewComments|prepareReviewRevision)"/.test(init.body) ? 120000 : 15000);
+    const timeout=AbortSignal.timeout(name.startsWith('word?')?90000:init?.body && /"(?:openWorkspace|refreshWorkspace|exportWord|saveFigureFromFiles|documentHistory|documentHistoryDetail|restoreDocumentHistory|reviewReminders|applySentence|undoSentence|saveObject|openFormattingConversation|previewWordFormatting|applyWordFormatting|undoWordFormatting|startManuscriptReview|publishReviewComments|prepareReviewRevision|startWordTranslation|adoptWordTranslation|applyText)"/.test(init.body) ? 120000 : 15000);
     const result = await fetch(`${PREFIX}/${name}`, { ...init, headers: { ...init?.headers, 'x-research-state': 'summary' }, signal: init?.signal ? AbortSignal.any([init.signal,timeout]) : timeout });
     let body; try { body = await result.json(); } catch { throw unavailable(); }
     if (!result.ok) {
@@ -44,6 +44,7 @@ export function createApi() {
     reviewStatus: (projectId, objectId, jobId, signal) => request(`review-status?${new URLSearchParams({projectId,objectId,...(jobId?{jobId}:{})})}`, {signal}),
     reviewBatchStatus: ({projectId, objectId, jobId}, signal) => request(`review-status?${new URLSearchParams({projectId,objectId,jobId,batch:'1'})}`, {signal}),
     reviewBatchProposal: ({projectId, objectId, jobId, findingId}, signal) => request(`review-status?${new URLSearchParams({projectId,objectId,jobId,findingId})}`, {signal}),
+    translationStatus: ({projectId, objectId, jobId, chapterId}, signal) => request(`translation-status?${new URLSearchParams({projectId,objectId,...(jobId&&{jobId}),...(chapterId&&{chapterId})})}`, {signal}),
     wordPage: (projectId, objectId, page, signal) => request(`asset?${new URLSearchParams({word:'1',projectId,objectId,page})}`,{signal}),
     wordImageUrl: (projectId, objectId, image) => `${PREFIX}/asset?${new URLSearchParams({word:'1',projectId,objectId,image})}`,
     async bootstrap({ signal, usePreload = false } = {}) {
@@ -82,7 +83,15 @@ export function createApi() {
         }
       }
     },
-    mutate(action, data) { const readOnly=['systemFonts','reviewReminders','documentHistoryDetail','prepareWordEdit','wordEditorStatus'].includes(action);if(!readOnly)generation++;const send=()=>request('mutate', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action, data }) });if(readOnly)return send();const operation = tail.then(send); tail = operation.catch(() => {}); return operation; },
+    mutate(action, data, { signal } = {}) {
+      const readOnly = ['systemFonts','reviewReminders','documentHistoryDetail','prepareWordEdit','wordEditorStatus','locateReviewFinding'].includes(action);
+      if (!readOnly) generation++;
+      const send = () => request('mutate', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action, data }), signal });
+      if (readOnly) return send();
+      const operation = tail.then(send);
+      tail = operation.catch(() => {});
+      return operation;
+    },
     versions: (projectId, objectId) => request(`versions?${new URLSearchParams({ projectId, objectId })}`),
     assetUrl: (projectId, objectId) => `${PREFIX}/asset?${new URLSearchParams({ projectId, objectId })}`,
     imageUrl: (projectId, objectId, src) => /^(https?:|data:image\/)/i.test(src || '') || src?.startsWith(PREFIX + '/asset?') ? src : `${PREFIX}/asset?${new URLSearchParams({ projectId, objectId, image: src || '' })}`,

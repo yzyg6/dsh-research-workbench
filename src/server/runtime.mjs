@@ -14,11 +14,12 @@ import {selectionWithText} from '../shared/word-sentence-update.mjs';
 import { WordPreview } from './word-preview.mjs';
 import { revisionAction, systemFonts, systemFont } from './revision-service.mjs';
 import { ManuscriptReview } from './manuscript-review.mjs';
+import { WordTranslation } from './word-translation.mjs';
 
 export { PREFIX };
 const testMarker = (value) => typeof value === 'string' && /^RW-[AB]-(WRITE|FIGURE|READ)-20261109$/.test(value) ? value : null;
 export const WORDCRAFT_FILES = ['wordcraft-0.17.0-bridge.js','wordcraft-0.17.0.wasm.gz','version.json','NotoSansCJKsc-Regular.woff2'];
-export const ROUTES = ['word', 'word-control', 'review-status', ...WORDCRAFT_FILES.map(name=>'wordcraft/'+name), 'state', 'mutate', 'versions', 'asset', 'app', 'app.js', 'host-status'].map((name) => `${PREFIX}/${name}`);
+export const ROUTES = ['word', 'word-control', 'review-status', 'translation-status', ...WORDCRAFT_FILES.map(name=>'wordcraft/'+name), 'state', 'mutate', 'versions', 'asset', 'app', 'app.js', 'host-status'].map((name) => `${PREFIX}/${name}`);
 const response = (value, status = 200) => Response.json(value, { status, headers: { 'cache-control': 'no-store' } });
 
 export function boundProjectContext(store, agentId, { objectId } = {}) {
@@ -40,9 +41,11 @@ export class WorkspaceRuntime {
     this.wordPreview = new WordPreview(this.store);
     this.wordEditing = new WordEditing(this.store);
     this.review = new ManuscriptReview(this);
+    this.translation = new WordTranslation(this);
     this.wordFormatting=new WordFormatting(this);
     this.wordLive=new WordLiveControl(this);
     this.runner.handlers.set('writing.sentence', (row, signal) => this.writing.run(row, signal));
+    this.runner.handlers.set('word.translation', (row, signal) => this.translation.run(row, signal));
     this.listeners = new Set();
     this.integrations = { projectTools: 'not-mounted', attachedSessions: 0, sentenceModel: 'not-mounted' };
     this.diagnosticTail = Promise.resolve();
@@ -94,6 +97,16 @@ export class WorkspaceRuntime {
       case 'arrangeReviewRelations': return { actionResult: await this.review.arrangeRelations(data) };
       case 'startReviewBatch': return { actionResult: await this.review.startBatch(data) };
       case 'skipReviewBatchItem': return { actionResult: await this.review.skipBatchItem(data) };
+      case 'startWordTranslation': return { actionResult:await this.translation.start(data) };
+      case 'retryWordTranslation': return { actionResult:await this.translation.retry(data) };
+      case 'editWordTranslation': return { actionResult:await this.translation.edit(data) };
+      case 'adoptWordTranslation': actionResult = await this.translation.adopt(data); break;
+      case 'pauseWordTranslation': {
+        const {row} = this.translation.record(data);
+        await this.store.cancelJob({ projectId:row.project_id, jobId:row.id });
+        this.runner.cancel(row.id);
+        return { actionResult:{} };
+      }
       case 'documentHistory': case 'documentHistoryDetail': case 'reviewReminders':
         return {actionResult:await revisionAction(this,action,data)};
       case 'restoreDocumentHistory': case 'checkReminder': case 'classifySentence': case 'editSentenceSuggestion':
@@ -180,11 +193,16 @@ export class WorkspaceRuntime {
         if(findingId)return response(this.review.batchProposal({...owner,findingId}));
         return response(url.searchParams.get('batch')==='1'?this.review.batchView(owner):this.review.status(owner));
       }
+      if (name === 'translation-status' && request.method === 'GET') {
+        const owner = Object.fromEntries(['projectId','objectId','jobId','chapterId'].map(key => [key,url.searchParams.get(key)]));
+        return response(this.translation.status(owner));
+      }
       if(name==='word-control'&&request.method==='POST'){
         if(!request.headers.get('content-type')?.startsWith('application/json'))return response({error:'操作请求必须为 JSON。'},415);
         const raw=await request.text();if(Buffer.byteLength(raw)>2*1024*1024)return response({error:'Word 回执过大。'},413);
         let body;try{body=JSON.parse(raw)}catch{return response({error:'Word 请求格式无效。'},400)}
-        if(!body?.data||typeof body.data!=='object'||!['poll','ack'].includes(body.action))return response({error:'Word 操作无效。'},400);
+        if(!body?.data||typeof body.data!=='object'||!['poll','ack','applyText'].includes(body.action))return response({error:'Word 操作无效。'},400);
+        if(body.action==='applyText')return response(await this.wordLive.applyText(body.data));
         return response(body.action==='poll'?this.wordLive.poll(body.data):this.wordLive.acknowledge(body.data));
       }
       if (name.startsWith('wordcraft/') && request.method === 'GET') {
@@ -200,7 +218,7 @@ export class WorkspaceRuntime {
         const result=await this.wordEditing.saveInteractive({projectId:url.searchParams.get('projectId'),objectId,expectedRevision:Number(url.searchParams.get('expectedRevision')),bytes:Buffer.concat(chunks,total)});
         for(const listener of this.listeners){try{listener()}catch{}}
         const state=await this.viewState({summary:request.headers.get('x-research-state')==='summary'});
-        return response(result.reopen?{...state,actionResult:{wordUpdate:{objectId,revision:result.revision,reopen:true}}}:state);
+        return response({...state,actionResult:{wordUpdate:{objectId,revision:result.revision,reopen:result.reopen}}});
       }
       if (name === 'app' && request.method === 'GET') return new Response(await readFile(join(this.publicRoot, 'index.html')), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' } });
       if (name === 'app.js' && request.method === 'GET') return new Response(await readFile(join(this.publicRoot, 'app.js')), { headers: { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' } });
@@ -226,7 +244,7 @@ export class WorkspaceRuntime {
         if(url.searchParams.has('systemFont'))return new Response(await systemFont(url.searchParams.get('systemFont')),{headers:{'content-type':'font/ttf','cache-control':'private, max-age=3600','x-content-type-options':'nosniff'}});
         await this.store.tail;
         const asset = url.searchParams.get('word') === '1' ? await this.wordPreview.asset(url.searchParams.get('projectId'),url.searchParams.get('objectId'),url.searchParams.has('image')?{image:url.searchParams.get('image')}:{page:Number(url.searchParams.get('page'))}) : url.searchParams.has('image') ? await this.store.workspaceFiles.image(url.searchParams.get('projectId'), url.searchParams.get('objectId'), url.searchParams.get('image')) : await this.store.asset(url.searchParams.get('projectId'), url.searchParams.get('objectId'));
-        return new Response(asset.bytes, { headers: { 'content-type': asset.contentType, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; sandbox", ...(asset.sha256 ? {etag:asset.sha256} : {}) } });
+        return new Response(asset.bytes, { headers: { 'content-type': asset.contentType, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'; sandbox", ...(asset.sha256 ? {etag:asset.sha256} : {}), ...(asset.revision ? {'x-research-revision':String(asset.revision)} : {}) } });
       }
       if (name === 'mutate' && request.method === 'POST') {
         if (!this.trustedTransport && request.headers.get('origin') && request.headers.get('origin') !== url.origin) return response({ error: '请求来源与本机工作台不一致。' }, 403);

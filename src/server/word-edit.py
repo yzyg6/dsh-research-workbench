@@ -18,9 +18,10 @@ from xml.parsers import expat
 from xml.sax.saxutils import escape
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.dont_write_bytecode = True
-from word_zip import replace_parts, replace_xml, restore
+from word_zip import replace_parts, replace_xml, restore, read as read_word, digest as word_digest
 from word_format import format_document
 from word_review import outline, paragraphs as review_paragraphs, add_comments, resolve_comments
+from word_translate import inspect_translation, apply_translation, extract_images, located_paragraphs
 
 W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 M = 'http://schemas.openxmlformats.org/officeDocument/2006/math'
@@ -142,6 +143,10 @@ def selected(root, anchor):
     return nodes, text, start, end
 
 
+class ChapterRangeError(ValueError):
+    """The selected text exists, but cannot be replaced as a chapter."""
+
+
 def chapter_selection(root, selection):
     endpoints = [selection['anchor'], selection['focus']]
     for point in endpoints:
@@ -161,7 +166,7 @@ def chapter_selection(root, selection):
     if end > start and last['off'] == 0:
         end -= 1 # A selection ending at the next paragraph's start excludes it.
     if not 2 <= end-start+1 <= 30:
-        raise ValueError('章节优化请选择连续的 2–30 个正文段落。')
+        raise ChapterRangeError('章节优化请选择连续的 2–30 个正文段落。')
 
     def plain(node):
         return ''.join(text.text or '' for text in node.iter(q('t')))
@@ -180,12 +185,12 @@ def chapter_selection(root, selection):
         text = plain(block)
         props = block.find(q('pPr'))
         if block.tag != q('p') or is_heading(block) or (props is not None and any(props.find(q(name)) is not None for name in ('numPr', 'sectPr'))):
-            raise ValueError('章节优化请选择小节正文，避开标题、编号列表、表格和分节符。')
+            raise ChapterRangeError('章节优化请选择小节正文，避开标题、编号列表、表格和分节符。')
         runs = [run for run in block.findall(q('r')) if not (
             run.find(q('commentReference')) is not None and
             all(child.tag in (q('rPr'), q('commentReference')) for child in run))]
         if any(child.tag not in (q('pPr'), q('r'), q('commentRangeStart'), q('commentRangeEnd')) for child in block) or any(child.tag not in (q('rPr'), q('t')) for run in runs for child in run):
-            raise ValueError('章节选区含有公式、域、超链接或其他复杂结构，请缩小选区。')
+            raise ChapterRangeError('章节选区含有公式、域、超链接或其他复杂结构，请缩小选区。')
         if not text.strip():
             continue # Blank paragraphs keep their place in the document.
         styles = set()
@@ -194,13 +199,13 @@ def chapter_selection(root, selection):
                 properties = run.find(q('rPr'))
                 styles.add(ET.tostring(properties) if properties is not None else b'')
         if len(styles) > 1 or text != text.strip() or len(text) > 4000:
-            raise ValueError('章节选区含有混合行内格式或过长段落，请缩小选区或按自然段精修。')
+            raise ChapterRangeError('章节选区含有混合行内格式或过长段落，请缩小选区或按自然段精修。')
         point = {'story': 'body', 'path': [index], 'off': 0}
         exact = {'anchor': point, 'focus': {**point, 'off': len(text.encode('utf-8'))}, 'text': text}
         ranges.append((*selected(root, exact), index))
         paragraphs.append(text)
     if len(paragraphs) < 2 or sum(map(len, paragraphs)) > 16000:
-        raise ValueError('章节优化需要至少两个有效段落，合计不超过 16000 字符。')
+        raise ChapterRangeError('章节优化需要至少两个有效段落，合计不超过 16000 字符。')
 
     pieces = []
     for index in range(start, last['path'][0]+1):
@@ -271,7 +276,10 @@ def text_changes(original, replacement, offset=0):
 
 
 def patch_changed_text(raw, root, nodes, changes):
-    anchors = text_anchors(raw, root)
+    return apply_edits(raw, changed_run_edits(raw, text_anchors(raw, root), nodes, changes))
+
+
+def changed_run_edits(raw, anchors, nodes, changes):
     edits, pos = [], 0
     for node in nodes:
         text = node.text or ''
@@ -290,7 +298,76 @@ def patch_changed_text(raw, root, nodes, changes):
         if new != text:
             edits.append(run_edit(raw, anchors[id(node)], new))
         pos = stop
-    return apply_edits(raw, edits)
+    return edits
+
+
+def direct_word_text(z, raw, root, args, source_bytes):
+    task = args['wordText']
+    field_nodes = set()
+    depth = 0
+    for node in root.iter():
+        if node.tag == q('fldChar'):
+            depth = max(0, depth + {'begin': 1, 'end': -1}.get(node.get(q('fldCharType')), 0))
+        elif depth and node.tag == q('t'):
+            field_nodes.add(node)
+    entries = []
+    for path, paragraph in located_paragraphs(root.find(q('body'))):
+        spans = []
+        current = []
+        for run in paragraph:
+            for node in run if run.tag == q('r') else (run,):
+                if node.tag == q('t') and node not in field_nodes:
+                    current.append(node)
+                elif node.tag != q('rPr') and current:
+                    spans.append(current)
+                    current = []
+        if current:
+            spans.append(current)
+        entries.append((list(path), [(nodes, ''.join(n.text or '' for n in nodes)) for nodes in spans]))
+    if 'query' in task:
+        term = task['query'].casefold()
+        matches = [{'path': path, 'segments': [text for _, text in spans]}
+                   for path, spans in entries if any(term in text.casefold() for _, text in spans)]
+        start = task.get('offset', 0)
+        return {'matches': matches[start:start+12], 'total': len(matches), 'offset': start}
+    if 'word/settings.xml' in z.namelist():
+        setting = ET.fromstring(z.read('word/settings.xml')).find(q('trackRevisions'))
+        if setting is not None and setting.get(q('val'), 'true') not in ('false','0','off'):
+            raise ValueError('当前 Word 已启用修订跟踪，请关闭跟踪后直接写入，或保留为对照建议。')
+    changes = {}
+    for number, edit in enumerate(task['replacements'], 1):
+        before = edit['before']
+        hit = None
+        for path, spans in entries:
+            if 'path' in edit and path != edit['path']:
+                continue
+            for nodes, text in spans:
+                start = text.find(before)
+                if start < 0:
+                    continue
+                if hit is not None or text.find(before, start+1) >= 0:
+                    raise ValueError(f'第 {number} 项原文出现多次，请用段落路径或更长原文定位。')
+                hit = (nodes, start)
+        if hit is None:
+            raise ValueError(f'第 {number} 项未找到完整可编辑原文，请重新搜索目标段落。')
+        nodes, start = hit
+        _, ranges = changes.setdefault(id(nodes[0]), (nodes, []))
+        ranges.append((start, start+len(before), before, edit['after']))
+    anchors = text_anchors(raw, root)
+    edits = []
+    for nodes, ranges in changes.values():
+        last = 0
+        diffs = []
+        for left, right, before, after in sorted(ranges):
+            if left < last:
+                raise ValueError('多项替换覆盖了相同的文字，请合并重叠的修改。')
+            diffs.extend(text_changes(before, after, left))
+            last = right
+        edits.extend(changed_run_edits(raw, anchors, nodes, diffs))
+    changed = apply_edits(raw, edits)
+    ET.fromstring(changed)
+    replace_xml(args['path'], changed, args['output'], source_bytes=source_bytes)
+    return {'replaced': len(task['replacements'])}
 
 
 def apply_edits(raw, edits):
@@ -314,8 +391,31 @@ def main(args=None):
         restore(args['path'], args['undo'], args['output'])
         print(json.dumps({'restored': True}))
         return
-    z, raw, root = load(args['path'])
+    translation = args.get('translation')
+    checked_task = args.get('wordText', translation)
+    source_bytes = read_word(args['path']) if checked_task is not None else None
+    expected = checked_task.get('sha256') if checked_task is not None else None
+    if expected and word_digest(source_bytes) != expected:
+        raise ValueError('中文稿在读取期间发生变化，请重新翻译已保存的版本。')
+    z, raw, root = load(args['path'] if source_bytes is None else io.BytesIO(source_bytes))
     try:
+        if 'wordText' in args:
+            print(json.dumps(direct_word_text(z, raw, root, args, source_bytes), ensure_ascii=False))
+            return
+        if translation is not None:
+            task = translation
+            if 'images' in task:
+                print(json.dumps({'files': extract_images(z, task['images'], task['directory'])}, ensure_ascii=False))
+                return
+            chapters, anchors = inspect_translation(z, root, task.get('selection'), wordcraft_text_offset)
+            if 'versions' in task:
+                if task.get('complete') and anchors.keys() != task['versions'].keys():
+                    raise ValueError('英文稿尚有未覆盖的 Word 翻译单元。')
+                apply_translation(args['path'], source_bytes, raw, root, anchors, task['versions'], args['output'], text_anchors, run_edit, apply_edits)
+                print(json.dumps({'translated': len(task['versions'])}))
+            else:
+                print(json.dumps({'chapters': chapters}, ensure_ascii=False))
+            return
         if args.get('reviewOutline'):
             print(json.dumps({'sections': outline(z, root), 'paragraphs': review_paragraphs(root)}, ensure_ascii=False))
             return
@@ -434,6 +534,8 @@ def worker():
             response = {'id': request['id'], 'result': result}
         except Exception as error:
             response = {'id': request.get('id'), 'error': str(error)}
+            if isinstance(error, ChapterRangeError):
+                response['errorCode'] = 'WORD_CHAPTER_RANGE'
         print(json.dumps(response, ensure_ascii=False), flush=True)
 
 

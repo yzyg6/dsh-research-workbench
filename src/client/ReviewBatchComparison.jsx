@@ -1,4 +1,5 @@
 import React from 'react';
+import { Icon } from './icons.jsx';
 import { ReviewDegreeBadge } from './ReviewRelationGraph.jsx';
 import { RevisionPanel } from './SentenceEditor.jsx';
 
@@ -16,8 +17,11 @@ export function ReviewBatchComparison({ api, owner, currentRevision, busy, onSel
   const [editing, setEditing] = React.useState(false);
   const [fault, setFault] = React.useState(null);
   const [refresh, setRefresh] = React.useState(0);
+  const [showFinding, setShowFinding] = React.useState(false);
+  const findingDetailsId = React.useId();
   const entries = snapshot?.batch?.items || [];
   const current = entries.find(item => item.findingId === findingId) || entries.find(item => !reviewedState(item.state)) || entries[0];
+  const currentFindingId = current?.findingId;
   const currentIndex = entries.indexOf(current);
   const nextPending = current && [...entries.slice(currentIndex + 1), ...entries.slice(0, currentIndex)].find(item => item.state === 'ready');
   const reviewed = entries.filter(item => reviewedState(item.state)).length;
@@ -27,6 +31,10 @@ export function ReviewBatchComparison({ api, owner, currentRevision, busy, onSel
   const reload = () => setRefresh(value => value + 1);
   const job = draft?.id === current?.jobId ? draft : null;
   const freshJob = !job || job.updatedAt === current?.updatedAt;
+
+  React.useEffect(() => {
+    if (currentFindingId && currentFindingId !== findingId) onSelect(currentFindingId);
+  }, [currentFindingId, findingId, onSelect]);
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -47,7 +55,7 @@ export function ReviewBatchComparison({ api, owner, currentRevision, busy, onSel
     };
     void read();
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [api, projectId, objectId, jobId, refresh]);
+  }, [api, projectId, objectId, jobId, currentRevision, refresh]);
 
   React.useEffect(() => {
     if (!current?.jobId) { setDraft(null); return; }
@@ -58,7 +66,12 @@ export function ReviewBatchComparison({ api, owner, currentRevision, busy, onSel
     return () => controller.abort();
   }, [api, projectId, objectId, jobId, current?.findingId, current?.jobId, current?.updatedAt, refresh]);
 
-  const choose = item => { if (item) { setFault(null); onSelect(item.findingId); } };
+  const choose = item => {
+    if (!item) return;
+    if (item.findingId !== current?.findingId) setShowFinding(false);
+    setFault(null);
+    onSelect(item.findingId);
+  };
   const updateDraft = next => {
     if(!next?.id)return;
     setDraft(next);
@@ -90,39 +103,47 @@ export function ReviewBatchComparison({ api, owner, currentRevision, busy, onSel
   const canRetryFailed = snapshot?.stage === 'ready' || isRunning && snapshot?.stage === 'batch';
   const retryable = canRetryFailed && (current?.state === 'failed' || snapshot.stage === 'ready' && ['ready', 'undone'].includes(current?.state));
   const conflict = fault?.code === 'REVIEW_BATCH_CONFLICT';
+  const showRetryAll = canRetryFailed && failed.length > 1;
+  const showRetry = retryable && (current.state !== 'ready' || conflict);
+  const showParagraphRetry = retryable && current.scope === 'chapter' && (current.state === 'failed' || conflict);
+  const showSkip = !job && current?.state === 'failed';
+  const showRefresh = fault && !conflict && !current?.error;
 
   return <section className="rw-review-batch-comparison" aria-label="批量修改逐条对照">
     <div className="rw-review-batch-nav">
-      <div className="rw-review-actions"><strong>批量修改对照</strong><button type="button" className="rw-quiet" disabled={navigationBusy} onClick={() => onBack(current?.findingId)}>返回审阅</button></div>
-      {entries.length > 0 && <>
-        <div className="rw-review-batch-progress" role="status">已审核 {reviewed}/{entries.length} 条{isRunning ? ' · 子智能体生成中' : ''}{failed.length > 0 && ` · ${failed.length} 条可重试`}</div>
+      {entries.length > 0 && <div className="rw-review-batch-toolbar">
         <div className="rw-review-batch-pager">
-          <button className="rw-secondary" disabled={navigationBusy || currentIndex < 1} onClick={() => choose(entries[currentIndex - 1])}>上一条</button>
+          <button className="rw-secondary" aria-label="上一条" title="上一条" disabled={navigationBusy || currentIndex < 1} onClick={() => choose(entries[currentIndex - 1])}><span>上一条</span><Icon name="chevron" size={13}/></button>
           <select aria-label="选择要审核的修改" value={current?.findingId || ''} disabled={navigationBusy} onChange={event => choose(entries.find(item => item.findingId === event.target.value))}>
             {entries.map((item, index) => <option key={item.findingId} value={item.findingId}>{index + 1}. {item.path.at(-1)} · {item.findingId} · {entryLabel(item)}</option>)}
           </select>
-          <button className="rw-secondary" disabled={navigationBusy || currentIndex >= entries.length - 1} onClick={() => choose(entries[currentIndex + 1])}>下一条</button>
+          <button className="rw-secondary" aria-label="下一条" title="下一条" disabled={navigationBusy || currentIndex >= entries.length - 1} onClick={() => choose(entries[currentIndex + 1])}><span>下一条</span><Icon name="chevron" size={13}/></button>
         </div>
-        {current && <div className="rw-review-batch-target">
-          <div><strong>{current.path.join(' › ')} · {current.findingId}</strong><ReviewDegreeBadge item={current}/></div>
-          <p>{current.issue}</p>
-          <p>{current.suggestion}</p>
-          {predecessors.length > 0 && <details><summary>建议先核对 {predecessors.length} 条关联修改</summary><ul>{predecessors.map(edge => {
-            const previous = entries.find(item => item.findingId === edge.from);
-            return <li key={edge.from}>{previous ? <button className="rw-quiet" disabled={navigationBusy} onClick={() => choose(previous)}>{edge.from} · {labels[previous.state]}</button> : edge.from} {edge.reason}</li>;
-          })}</ul></details>}
-        </div>}
-      </>}
-      {interrupted && <button className="rw-secondary" disabled={workBusy} onClick={() => void run(() => api.mutate('resumeManuscriptReview', { projectId, objectId, jobId }))}>继续生成修改稿</button>}
-      {(fault || current?.error || snapshot?.error) && <p className="rw-sentence-warning" role="alert">{fault?.message || current?.error || snapshot?.error}</p>}
-      <div className="rw-review-actions">
-        {nextPending && <button className="rw-secondary" disabled={navigationBusy} onClick={() => choose(nextPending)}>下一条待审核</button>}
-        {canRetryFailed && failed.length > 1 && <button className="rw-secondary" disabled={workBusy} onClick={() => void retryFailed()}>重试 {failed.length} 条失败项</button>}
-        {retryable && (current.state !== 'ready' || conflict) && <button className="rw-secondary" disabled={workBusy} onClick={() => void retry()}>重新生成这条</button>}
-        {retryable && current.scope === 'chapter' && (current.state === 'failed' || conflict) && <button className="rw-secondary" disabled={workBusy} onClick={() => void retry('paragraph')}>按段落生成</button>}
-        {!job && current?.state === 'failed' && <button className="rw-quiet" disabled={workBusy} onClick={() => void skip()}>跳过，保留原文</button>}
-        {fault && !conflict && !current?.error && <button className="rw-quiet" disabled={workBusy} onClick={() => { setFault(null); reload(); }}>刷新对照</button>}
+        {nextPending && <button className="rw-quiet rw-review-batch-next" disabled={navigationBusy} onClick={() => choose(nextPending)}>下一条待审核</button>}
+      </div>}
+      <div className="rw-review-batch-meta">
+        {entries.length > 0 && <div className="rw-review-batch-progress" role="status">已审核 {reviewed}/{entries.length} 条{isRunning ? ' · 子智能体生成中' : ''}{failed.length > 0 && ` · ${failed.length} 条可重试`}{current?.scopeAdjusted && ' · 按段落生成'}</div>}
+        {current && <button type="button" className="rw-quiet rw-review-batch-disclosure" aria-expanded={showFinding} aria-controls={findingDetailsId} onClick={() => setShowFinding(value => !value)}>审阅意见</button>}
+        <button type="button" className="rw-quiet rw-review-batch-back" disabled={navigationBusy} onClick={() => onBack(current?.findingId)}>返回审阅</button>
       </div>
+      {current && <div id={findingDetailsId} className="rw-review-batch-target" role="region" aria-label="当前条目的审阅意见" tabIndex={0} hidden={!showFinding}>
+        <div><strong>{current.path.join(' › ')} · {current.findingId}</strong><ReviewDegreeBadge item={current}/></div>
+        <p>{current.issue}</p>
+        <p>{current.suggestion}</p>
+        {predecessors.length > 0 && <details><summary>建议先核对 {predecessors.length} 条关联修改</summary><ul>{predecessors.map(edge => {
+          const previous = entries.find(item => item.findingId === edge.from);
+          return <li key={edge.from}>{previous ? <button className="rw-quiet" disabled={navigationBusy} onClick={() => choose(previous)}>{edge.from} · {labels[previous.state]}</button> : edge.from} {edge.reason}</li>;
+        })}</ul></details>}
+      </div>}
+      {(fault || current?.error || snapshot?.error) && <p className="rw-sentence-warning" role="alert">{fault?.message || current?.error || snapshot?.error}</p>}
+      {(interrupted || showRetryAll || showRetry || showParagraphRetry || showSkip || showRefresh) && <div className="rw-review-actions">
+        {interrupted && <button className="rw-secondary" disabled={workBusy} onClick={() => void run(() => api.mutate('resumeManuscriptReview', { projectId, objectId, jobId }))}>继续生成修改稿</button>}
+        {showRetryAll && <button className="rw-secondary" disabled={workBusy} onClick={() => void retryFailed()}>重试 {failed.length} 条失败项</button>}
+        {showRetry && <button className="rw-secondary" disabled={workBusy} onClick={() => void retry()}>重新生成这条</button>}
+        {showParagraphRetry && <button className="rw-secondary" disabled={workBusy} onClick={() => void retry('paragraph')}>按段落生成</button>}
+        {showSkip && <button className="rw-quiet" disabled={workBusy} onClick={() => void skip()}>跳过，保留原文</button>}
+        {showRefresh && <button className="rw-quiet" disabled={workBusy} onClick={() => { setFault(null); reload(); }}>刷新对照</button>}
+      </div>}
     </div>
     {job ? <div className="rw-native-sentence-review"><RevisionPanel key={job.id} job={job} embedded workingCopy batchReview
       currentRevision={currentRevision} busy={workBusy||!freshJob} modelReady onClose={() => void skip()} onEditSuggestion={edit} onEditingChange={setEditing}

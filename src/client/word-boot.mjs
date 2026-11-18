@@ -1,5 +1,5 @@
 /** Fetch only immutable input bytes. Retrying this read never saves a document. */
-export async function readWordBytes(api,projectId,objectId,signal){
+export async function readWordDocument(api,projectId,objectId,revision,signal){
   for(let attempt=0;;attempt++){
     signal?.throwIfAborted();
     try{
@@ -7,7 +7,8 @@ export async function readWordBytes(api,projectId,objectId,signal){
       if(!result.ok)throw Object.assign(Error('Word 读取暂未完成，请重试打开文稿。'),{retry:[404,408,429,502,503,504].includes(result.status)});
       const bytes=await result.arrayBuffer();signal?.throwIfAborted();
       if(!bytes.byteLength||bytes.byteLength>32*1024*1024)throw Error('Word 内容为空或超过32 MiB。');
-      return bytes;
+      const servedRevision=Number(result.headers?.get('x-research-revision'));
+      return {bytes,objectId,revision:Number.isSafeInteger(servedRevision)&&servedRevision>0?servedRevision:revision};
     }catch(error){
       signal?.throwIfAborted();if(attempt>=2||!(error.retry||error instanceof TypeError||error.name==='TimeoutError'))throw error;
       await new Promise((resolve,reject)=>{const abort=()=>{clearTimeout(timer);reject(signal.reason)},timer=setTimeout(()=>{signal?.removeEventListener('abort',abort);resolve()},100*2**attempt);signal?.addEventListener('abort',abort,{once:true})});
@@ -27,12 +28,12 @@ export async function prepareWordBoot(api,projectId,objectId,revision,signal){
       }
     }
   };
-  const [prepared,assets,bytes]=await Promise.all([
+  const [prepared,assets,document]=await Promise.all([
     prepare(),
     api.wordcraftAssets(signal),
-    readWordBytes(api,projectId,objectId,signal),
+    readWordDocument(api,projectId,objectId,revision,signal),
   ]);
   signal?.throwIfAborted();
   if(!prepared.actionResult?.chineseFont)throw Error('Word 中文字体接口尚未就绪，请更新科研工作台插件。');
-  return{assets,fonts:prepared.actionResult.fontFamilies||[],document:{bytes,objectId,revision}};
+  return{assets,fonts:prepared.actionResult.fontFamilies||[],document};
 }
